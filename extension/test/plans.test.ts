@@ -37,7 +37,7 @@ describe("PLANS (single source)", () => {
     // The highlighted ("POPULAR") plan must never be a dominated option — the
     // UI is actively steering users to it.
     const highlighted = PLANS.find((p) => p.highlight);
-    if (highlighted?.id === "annual" && lifetime) {
+    if (highlighted?.id === "annual" && annual && lifetime) {
       expect(num(lifetime)).toBeGreaterThan(num(annual));
     }
   });
