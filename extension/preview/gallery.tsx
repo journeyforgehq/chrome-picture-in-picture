@@ -2,7 +2,7 @@
 // representative state, PLUS the popup/options Views in every representative
 // tier/state, wrapped in <ThemeProvider>, so Playwright MCP can screenshot +
 // computed-style-check each state (spec §11A, Plan 2b-ii).
-import React, { useState } from "react";
+import React, { useState, useRef, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { Typography, Space, Divider } from "antd";
 import {
@@ -18,6 +18,8 @@ import {
 import type { RestoreResult } from "../src/billing/entitlement";
 import { PopupView } from "../src/popup/PopupView";
 import { OptionsView } from "../src/options/OptionsView";
+import { PIP_ERROR_CODES, messageFor, severityFor } from "../src/pip/errors";
+import { showToast } from "../src/pip/toast";
 
 const { Title } = Typography;
 
@@ -84,6 +86,27 @@ function OptionsViewCard({ restoreResult }: { restoreResult: RestoreResult | und
   );
 }
 
+/** The toast is plain DOM inside a shadow root, not React — so it is mounted
+ * imperatively into a ref. `mount: "detached"` keeps showToast from appending
+ * itself to document.body (and from replacing the previous card's toast);
+ * placement and teardown belong to the gallery here. */
+function ToastCard({ code }: { code: (typeof PIP_ERROR_CODES)[number] }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const sev = severityFor(code);
+    if (sev === "tooltip") return;
+    const host = showToast({ text: messageFor(code), severity: sev, mount: "detached" });
+    ref.current?.append(host);
+    return () => host.remove();
+  }, [code]);
+  return (
+    <div data-testid={`toast-${code}`}>
+      <Typography.Text type="secondary">{code}</Typography.Text>
+      <div ref={ref} />
+    </div>
+  );
+}
+
 function Gallery() {
   const [paywallOpen, setPaywallOpen] = useState(true); // OPEN by default so the modal is visible on load
 
@@ -142,6 +165,13 @@ function Gallery() {
               <Typography.Text type="secondary">{label}</Typography.Text>
               <RestoreForm onRestore={() => {}} result={result} />
             </div>
+          ))}
+        </Space>
+
+        <Divider orientation="left">Toast — all six states</Divider>
+        <Space direction="vertical" size="large" style={{ width: "100%" }}>
+          {PIP_ERROR_CODES.map((code) => (
+            <ToastCard key={code} code={code} />
           ))}
         </Space>
 
