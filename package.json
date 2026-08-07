@@ -1,0 +1,11 @@
+{
+  "name": "template-dev",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node dev.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "preflight": "node scripts/preflight.mjs",
+    "test": "node --test test/*.test.mjs"
+  }
+}

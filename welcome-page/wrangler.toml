@@ -1,0 +1,19 @@
+# Cloudflare Pages project for this extension's welcome + /uninstall pages.
+# Same provider as the backend Worker — one dashboard, one bill, one CDN.
+#
+# `picture-in-picture` is filled in by `new-extension` (same token as the backend
+# Worker name), so the Pages project is `<worker>-web`.
+#
+# Deploy (needs Cloudflare auth):   npm run deploy
+#   → `gatsby build` then `wrangler pages deploy public --project-name picture-in-picture-web`
+#
+# Or connect the repo in the dashboard (Workers & Pages → Create → Pages):
+#   Build command:      gatsby build
+#   Build output dir:   public
+#   (monorepo: set the project root directory to `welcome-page`)
+#
+# First deploy creates the project + a https://picture-in-picture-web.pages.dev URL.
+# Set WELCOME_URL + UNINSTALL_URL (→ <site>/uninstall) in extension/.env and rebuild.
+name = "picture-in-picture-web"
+compatibility_date = "2025-01-01"
+pages_build_output_dir = "public"

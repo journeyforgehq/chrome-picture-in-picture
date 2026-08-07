@@ -1,0 +1,11 @@
+node_modules/
+dist/
+dist-fixture/
+dist-preview/
+*.log
+.wrangler-e2e/
+test-results/
+playwright-report/
+e2e/__screens__/
+.env.local
+extension.zip

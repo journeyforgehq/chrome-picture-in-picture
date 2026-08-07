@@ -1,0 +1,25 @@
+{
+  "name": "template-welcome-page",
+  "private": true,
+  "version": "0.1.0",
+  "scripts": {
+    "develop": "gatsby develop",
+    "build": "gatsby build",
+    "serve": "gatsby serve -p 9000",
+    "typecheck": "tsc --noEmit",
+    "deploy": "gatsby build && npx wrangler pages deploy public --project-name picture-in-picture-web"
+  },
+  "dependencies": {
+    "antd": "5.22.5",
+    "@ant-design/icons": "5.5.2",
+    "gatsby": "5.13.7",
+    "react": "18.3.1",
+    "react-dom": "18.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "22.20.0",
+    "@types/react": "18.3.18",
+    "@types/react-dom": "18.3.5",
+    "typescript": "5.9.3"
+  }
+}

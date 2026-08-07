@@ -1,0 +1,30 @@
+{
+  "name": "template-backend",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "predeploy": "node scripts/check-placeholders.mjs --env top",
+    "deploy": "wrangler deploy",
+    "predeploy:staging": "node scripts/check-placeholders.mjs --env staging",
+    "deploy:staging": "wrangler deploy --env staging && npm run health:check -- --env staging --token \"$HEALTH_TOKEN\"",
+    "predeploy:production": "node scripts/check-placeholders.mjs --env production",
+    "deploy:production": "wrangler deploy --env production && npm run health:check -- --env production --token \"$HEALTH_TOKEN\"",
+    "health:check": "node scripts/health-check.mjs",
+    "health:check:staging": "node scripts/health-check.mjs --env staging --token \"$HEALTH_TOKEN\"",
+    "health:check:production": "node scripts/health-check.mjs --env production --token \"$HEALTH_TOKEN\"",
+    "guard:kv-no-delete": "node scripts/guard-no-kv-delete.mjs",
+    "pretest": "node scripts/guard-no-kv-delete.mjs",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@cloudflare/vitest-pool-workers": "^0.8.19",
+    "@cloudflare/workers-types": "^4.20260501.0",
+    "typescript": "^5.6.0",
+    "vitest": "~3.0.0",
+    "wrangler": "^4.20.0"
+  }
+}

@@ -1,0 +1,5 @@
+{
+  "local": "http://localhost:8787",
+  "staging": "REPLACE_WITH_STAGING_WORKER_URL",
+  "production": "REPLACE_WITH_PROD_WORKER_URL"
+}

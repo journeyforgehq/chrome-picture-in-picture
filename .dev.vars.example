@@ -1,0 +1,15 @@
+# Local worker vars/secrets for `wrangler dev`. `npm run doctor` (run automatically
+# at the top of `npm run dev`) copies this to backend/.dev.vars when that file is
+# missing. NEVER commit the real backend/.dev.vars — it is gitignored.
+#
+# Dev-force-pro: with ENVIRONMENT=dev AND DEV_FORCE_PRO=1 the worker treats every
+# device as Pro, so the reference extension shows Pro with no Stripe account.
+# (Honored ONLY when ENVIRONMENT=dev — it can never ship enabled in production.)
+ENVIRONMENT=dev
+DEV_FORCE_PRO=1
+
+# Needed only when you set DEV_FORCE_PRO=0 to test the real billing loop with
+# `stripe listen`. Use TEST-mode keys. These placeholders are unused while
+# DEV_FORCE_PRO=1 (the worker short-circuits before reading them).
+STRIPE_SECRET_KEY=sk_test_replace_me
+STRIPE_WEBHOOK_SECRET=whsec_replace_me

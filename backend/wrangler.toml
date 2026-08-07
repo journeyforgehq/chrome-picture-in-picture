@@ -1,0 +1,36 @@
+name = "picture-in-picture"
+main = "src/index.ts"
+compatibility_date = "2025-09-06"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+ENVIRONMENT = "production"
+APP_VERSION = "0.0.0"
+
+[[kv_namespaces]]
+binding = "PAID"
+id = "REPLACE_WITH_KV_ID"
+
+# Workers Logs — collect console logs + invocation metadata (Cloudflare dashboard
+# → Workers & Pages → this worker → Logs). On by default for every generated backend.
+[observability]
+enabled = true
+head_sampling_rate = 1
+
+# ── Named environments ───────────────────────────────────────────────
+# `wrangler deploy --env staging|production` deploys a SEPARATE worker
+# (name suffixed automatically → picture-in-picture-staging / -production).
+# Named envs do NOT inherit top-level [vars]/[[kv_namespaces]] — re-declare here.
+# Create separate KV namespaces per env (see DEPLOY.md) and paste ids below.
+
+[env.staging]
+vars = { ENVIRONMENT = "staging", APP_VERSION = "0.0.0" }
+[[env.staging.kv_namespaces]]
+binding = "PAID"
+id = "REPLACE_WITH_STAGING_KV_ID"
+
+[env.production]
+vars = { ENVIRONMENT = "production", APP_VERSION = "0.0.0" }
+[[env.production.kv_namespaces]]
+binding = "PAID"
+id = "REPLACE_WITH_PROD_KV_ID"
