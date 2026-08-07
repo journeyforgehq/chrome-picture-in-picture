@@ -1,32 +1,40 @@
 {
   "manifest_version": 3,
   "name": "Picture in Picture - Floating Video Player",
+  "description": "Pop out any video into a floating picture in picture window that stays on top. One click miniplayer for Chrome, no setup.",
   "version": "0.1.0",
-  "description": "Picture in Picture - Floating Video Player",
-  "permissions": ["storage", "activeTab"],
-  "background": {
-    "service_worker": "background.js",
-    "type": "module"
+  "minimum_chrome_version": "116",
+
+  "icons": {
+    "16": "icons/icon-16.png",
+    "48": "icons/icon-48.png",
+    "128": "icons/icon-128.png"
   },
-  "content_scripts": [
-    {
-      "matches": ["https://example.com/*"],
-      "js": ["content.js"],
-      "run_at": "document_idle"
-    }
-  ],
+
   "action": {
-    "default_popup": "popup.html",
+    "default_title": "Pop this video out (Alt+P)",
     "default_icon": {
       "16": "icons/icon-16.png",
       "48": "icons/icon-48.png",
       "128": "icons/icon-128.png"
     }
   },
+
+  "background": { "service_worker": "background.js", "type": "module" },
   "options_page": "options.html",
-  "icons": {
-    "16": "icons/icon-16.png",
-    "48": "icons/icon-48.png",
-    "128": "icons/icon-128.png"
-  }
+
+  "permissions": ["storage", "activeTab", "scripting"],
+  "optional_host_permissions": ["<all_urls>"],
+  "host_permissions": [],
+
+  "_comment_no_content_scripts": "R-03: deliberately NO static content_scripts block. Manual PiP injects via scripting.executeScript under activeTab; embedded-player support registers dynamically after chrome.permissions.request() resolves. A declarative block here would reintroduce the broad-host-warning risk at install.",
+
+  "_comment_use_execute_action": "The shortcut binds to Chrome's built-in _execute_action, NOT a custom command, so the key routes through chrome.action.onClicked — the SAME handler as the toolbar click, with the same user activation. A custom command would need a duplicate executeScript path, and that duplicate is precisely where a gesture-killing await appeared twice during Phase 0.",
+  "commands": {
+    "_execute_action": {
+      "suggested_key": { "default": "Alt+P", "mac": "Alt+P" }
+    }
+  },
+
+  "_comment_no_web_accessible_resources": "S-06: no web_accessible_resources. The toast uses a shadow root with adoptedStyleSheets, so no stylesheet is ever exposed. NOTE the original reasoning was WRONG — a <link> from a content script is NOT blocked by page CSP; content scripts are CSP-exempt. The block is gone for a better reason: less fingerprinting surface, plus shadow isolation from aggressive page CSS."
 }

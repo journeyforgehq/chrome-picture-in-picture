@@ -4,54 +4,58 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const manifest = JSON.parse(
+  readFileSync(path.resolve(__dirname, "../src/static/manifest.json"), "utf8")
+);
 
-describe("manifest.json", () => {
-  const manifest = JSON.parse(
-    readFileSync(path.resolve(__dirname, "../src/static/manifest.json"), "utf8")
-  );
-
-  it("is an MV3 manifest with the required billing permissions", () => {
-    expect(manifest.manifest_version).toBe(3);
-    expect(manifest.permissions).toEqual(["storage", "activeTab"]);
+describe("manifest permission allowlist (R-04)", () => {
+  // An ALLOWLIST, not a denylist. A denylist would miss `proxy`, `debugger`,
+  // `management`, `webRequestBlocking`, and anything Chrome adds after 2026.
+  // Adding ANY permission fails here until someone consciously edits this line.
+  it("declares exactly these three permissions and nothing else", () => {
+    expect(manifest.permissions).toEqual(["storage", "activeTab", "scripting"]);
   });
 
-  it("declares a module-type background service worker", () => {
-    expect(manifest.background).toEqual({
-      service_worker: "background.js",
-      type: "module",
+  it("declares no static host permissions", () => {
+    expect(manifest.host_permissions).toEqual([]);
+  });
+
+  it("requests <all_urls> only as an optional host permission", () => {
+    expect(manifest.optional_host_permissions).toEqual(["<all_urls>"]);
+  });
+
+  // R-03: a static block would stake the minimal-install-prompt advantage on
+  // "a block probably stays inert while host_permissions is empty".
+  it("has no static content_scripts block", () => {
+    expect(manifest.content_scripts).toBeUndefined();
+  });
+
+  // S-06: not because page CSP would block a stylesheet (it would not — content
+  // scripts are CSP-exempt), but because fewer exposed resources means less
+  // fingerprinting surface. The toast uses a shadow root instead.
+  it("exposes no web-accessible resources", () => {
+    expect(manifest.web_accessible_resources).toBeUndefined();
+  });
+
+  // Gesture invariant 3: the key and the click must share ONE handler.
+  it("binds the shortcut to _execute_action, never a custom command", () => {
+    expect(manifest.commands._execute_action).toEqual({
+      suggested_key: { default: "Alt+P", mac: "Alt+P" },
     });
+    const custom = Object.keys(manifest.commands).filter((k) => !k.startsWith("_"));
+    expect(custom).toEqual([]);
   });
 
-  it("declares exactly one content script entry, running at document_idle", () => {
-    expect(manifest.content_scripts).toHaveLength(1);
-    expect(manifest.content_scripts[0]).toMatchObject({
-      js: ["content.js"],
-      run_at: "document_idle",
-    });
-    expect(Array.isArray(manifest.content_scripts[0].matches)).toBe(true);
-    expect(manifest.content_scripts[0].matches.length).toBeGreaterThan(0);
+  it("has no default_popup — the toolbar button is the feature", () => {
+    expect(manifest.action.default_popup).toBeUndefined();
   });
 
-  it("content script uses a narrow default match (not <all_urls>)", () => {
-    const cs = manifest.content_scripts?.[0];
-    expect(cs.matches).not.toContain("<all_urls>");
-    expect(cs.matches).toEqual(["https://example.com/*"]);
+  // documentPictureInPicture (the paid tier, a later plan) requires exactly 116.
+  it("floors at Chrome 116", () => {
+    expect(manifest.minimum_chrome_version).toBe("116");
   });
 
-  it("uses the Picture in Picture - Floating Video Player scaffold token as the display name", () => {
-    expect(manifest.name).toBe("Picture in Picture - Floating Video Player");
-  });
-
-  it("declares a popup action and an options page with icon triples", () => {
-    expect(manifest.action).toEqual({
-      default_popup: "popup.html",
-      default_icon: {
-        16: "icons/icon-16.png",
-        48: "icons/icon-48.png",
-        128: "icons/icon-128.png",
-      },
-    });
-    expect(manifest.options_page).toBe("options.html");
+  it("keeps the icon triple the factory actually generates", () => {
     expect(manifest.icons).toEqual({
       16: "icons/icon-16.png",
       48: "icons/icon-48.png",
