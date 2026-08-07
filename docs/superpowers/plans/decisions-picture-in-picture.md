@@ -183,3 +183,60 @@ This is a decision record. Per the plan, deletion of the popup, the demo tools,
 and the dropped plans happens 16 tasks from now, gated on a parity check against
 this file — never on "it compiles". Nothing above should be removed until the
 five ⬜ REQUIRED sign-offs are granted and the two ⬜ UNDECIDED rows are answered.
+
+---
+
+## Sign-off — 2026-08-07
+
+Asked of the product owner against the code about to be deleted, not against the
+design document that originally decided them. Verbatim answers.
+
+### Observable drops — ✅ "Confirm all five"
+
+| Inv # | Capability | Status |
+|---|---|---|
+| 15 | `popup.html` shell — the popup surface itself | ✅ SIGNED OFF |
+| 7 | `UppercaseTool` demo feature | ✅ SIGNED OFF |
+| 8 | `ProTool` demo feature | ✅ SIGNED OFF |
+| 44 | Absence of `chrome.action.onClicked` — the toolbar click becomes the feature | ✅ SIGNED OFF |
+| 61 | Three-tier ladder → lifetime only, repriced $79 → $9.99 | ✅ SIGNED OFF |
+
+### #46 — resolved, not a human question
+
+**No `host_permissions` at all is correct and compatible with dynamic registration.**
+The concern was that `registerContentScripts` needs declared `host_permissions`,
+which would reintroduce the broad install warning. It needs **granted** host
+permission, not **declared** — and `optional_host_permissions: ["<all_urls>"]`
+granted at runtime through `chrome.permissions.request()` satisfies it. That is
+precisely the mechanism §2.8 and R-03 specify, and S-05 measured registration
+succeeding against a granted origin. The install prompt stays minimal because
+nothing broad is declared at install time.
+
+Row 42's guarantee is rescued as specified: the test asserting the extension does
+not request `<all_urls>` is replaced by the R-04 allowlist guard, which asserts
+`host_permissions` is exactly `[]` and `permissions` is exactly
+`['storage','activeTab','scripting']`.
+
+### #67 — CORE drift: ✅ "Accept and record the drift"
+
+Three files drift deliberately. `docs/superpowers/plans/core-drift.md` records each
+with its reason, so a future `sync-core` refusal is a documented decision rather
+than an archaeology problem:
+
+| File | Why it drifts |
+|---|---|
+| `extension/src/billing/plans.ts` | Per-child pricing — lifetime-only at $9.99. Arguably what this file is for |
+| `extension/e2e/billing.spec.ts` | Repointed from `popup.html` to `options.html`; follows from removing the popup |
+| `extension/e2e/harness/identity.ts` | Doc comment cites `src/popup/popup.tsx`, which no longer exists |
+
+### The Upgrade button — ✅ "Keep it wired"
+
+The options page keeps the factory's Upgrade button and `UpgradePaywall` mount
+through plan 1. Rationale: **plan 1 / plan 2 is an implementation split, not a
+release split** — `00-summary.md` records that v1 launches *with* Pro. Stripping
+the purchase path would strand the preserved checkout hand-off and leave six
+billing e2e specs exercising something no user can reach. Plan 2 fills in the Pro
+rows behind it.
+
+This supersedes the "UpgradePaywall DEFERRED" reading in the table above: the
+*mount* is preserved and live; only the *Pro rows it gates* are deferred.
