@@ -23,7 +23,8 @@
     "e2e:staging": "cross-env TARGET=staging playwright test",
     "e2e:install": "playwright install chromium",
     "e2e:typecheck": "tsc --noEmit -p e2e/tsconfig.json",
-    "e2e:live": "playwright test --config playwright.stripe-live.config.ts"
+    "e2e:live": "playwright test --config playwright.stripe-live.config.ts",
+    "e2e:visual": "playwright test --config playwright.visual.config.ts"
   },
   "dependencies": {
     "antd": "5.22.5",

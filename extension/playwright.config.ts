@@ -9,6 +9,9 @@ const STAGING = process.env.TARGET === "staging";
 export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
+  // Visual specs need the preview gallery on :4173, not this suite's worker
+  // backend. They run under playwright.visual.config.ts instead.
+  testIgnore: "**/*-visual.spec.ts",
   workers: 1,
   fullyParallel: false,
   timeout: STAGING ? 120_000 : 60_000,
