@@ -1,5 +1,11 @@
 /// <reference types="chrome" />
 import { config } from "../billing/config";
+import { decideOutcome } from "./action";
+import { pipEntry } from "../pip/entry";
+import type { PipEntryResult } from "../pip/entry";
+import { showToast } from "../pip/toast";
+import { messageFor, severityFor } from "../pip/errors";
+import { getSettings, setActivePip, clearActivePip } from "../pip/state";
 
 export interface InstalledDetails {
   reason: string; // chrome.runtime.OnInstalledReason, kept as string for pure-function testability
@@ -80,5 +86,65 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
     const result = handleMessage(message as RelayMessage);
     sendResponse(result);
     return false;
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INVARIANT 1 — executeScript MUST be the first statement here, with NO await
+  // before it. Transient user activation does not survive an await in the service
+  // worker: a spike run failed because `await chrome.permissions.getAll()` sat on
+  // this line and the injected script arrived with hasBeenActive false.
+  // DIAGNOSTICS AND PERSISTENCE GO AFTER, INSIDE THE .then().
+  //
+  // One call serves both permission modes: under activeTab this reaches the top
+  // frame only; with <all_urls> granted it reaches every frame. pipEntry
+  // arbitrates in-frame, so the worker never has to ask which mode it is in —
+  // and asking would itself have been a fatal await.
+  // ═══════════════════════════════════════════════════════════════════════════
+  chrome.action.onClicked.addListener((tab) => {
+    if (tab.id === undefined) return;
+    const tabId = tab.id;
+
+    const injection = chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: pipEntry,
+      args: [{}],
+    });
+
+    void (async () => {
+      let frames: chrome.scripting.InjectionResult<PipEntryResult>[];
+      try {
+        frames = (await injection) as chrome.scripting.InjectionResult<PipEntryResult>[];
+      } catch {
+        // executeScript rejects on chrome://, the Web Store and the PDF viewer.
+        await chrome.action.setTitle({ tabId, title: messageFor("RESTRICTED_URL") });
+        return;
+      }
+
+      const results = frames.map((f) => f.result).filter(Boolean) as PipEntryResult[];
+      const { toast } = decideOutcome(results);
+
+      const winnerFrame = frames.find((f) => f.result?.acted && f.result?.outcome === "PIP_OK");
+      if (winnerFrame?.result) {
+        await setActivePip({
+          tabId,
+          frameId: winnerFrame.frameId ?? 0,
+          label: winnerFrame.result.winner?.label ?? "",
+        });
+      } else if (results.some((r) => r.outcome === "PIP_EXITED")) {
+        await clearActivePip();
+      }
+
+      if (!toast) return;
+      if (!(await getSettings()).toastEnabled) return;
+      if (severityFor(toast) === "tooltip") {
+        await chrome.action.setTitle({ tabId, title: messageFor(toast) });
+        return;
+      }
+      await chrome.scripting.executeScript({
+        target: { tabId, frameIds: [0] },
+        func: showToast,
+        args: [{ text: messageFor(toast), severity: severityFor(toast) as "info" | "blocked" }],
+      });
+    })();
   });
 }
