@@ -1,5 +1,5 @@
 import { createServer, type Server } from "node:http";
-import { readFileSync, existsSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { join, extname } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -21,7 +21,19 @@ export function startServers(): { close(): Promise<void> } {
     const s = createServer((req, res) => {
       const rel = decodeURIComponent((req.url || "/").split("?")[0]).replace(/^\/+/, "");
       const file = join(ROOT, rel);
-      if (!file.startsWith(ROOT) || !existsSync(file)) {
+      // isFile(), not existsSync(). MEASURED: with a bare existsSync() check a
+      // request for "/" resolves to ROOT itself, which exists, and the
+      // readFileSync below throws EISDIR *synchronously inside the request
+      // handler* — an uncaughtException that takes the whole Playwright worker
+      // down with a crash that says nothing about the fixture. Directories and
+      // missing files are both just 404 here.
+      let stat;
+      try {
+        stat = statSync(file);
+      } catch {
+        stat = null;
+      }
+      if (!file.startsWith(ROOT) || !stat || !stat.isFile()) {
         res.writeHead(404).end();
         return;
       }
