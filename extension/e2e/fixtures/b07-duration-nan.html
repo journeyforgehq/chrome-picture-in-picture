@@ -1,0 +1,20 @@
+<!doctype html><meta charset="utf-8"><title>B07 — cold element, duration not yet known</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // A video whose metadata has not landed reports duration NaN AND readyState <
+  // HAVE_CURRENT_DATA, because those are two views of the same fact. What is
+  // pinned here is the READYSTATE guard: entry.ts checks it first, so the
+  // answer is reason "not-ready", not "none-found". The difference is what the
+  // user is told — "come back in a moment" versus "there is nothing here" — and
+  // someone clicking a second too early must get the first one.
+  //
+  // MEASURED, so the fixture does not overclaim: this element's duration is
+  // Infinity, not NaN. A canvas captureStream always reports Infinity, so the
+  // harness cannot produce a real NaN duration and no override pretends to —
+  // NaN's own path through the filter (`!(NaN > 5)` rejects it) is covered by
+  // the unit tests, where duration is stubbed. Here the readyState guard fires
+  // first and the duration is never reached, which is exactly the ordering a
+  // cold element depends on.
+  document.body.append(makeVideo({ label: "cold", readyState: 1 }));
+  ready();
+</script>

@@ -1,0 +1,21 @@
+<!doctype html><meta charset="utf-8"><title>B05 — identical videos, DOM order breaks the tie</title>
+<style>
+  /* Both videos are stacked at the SAME fixed position on purpose. A tie needs
+     IDENTICAL geometry: laid out normally, 640+640 exceeds the 1280 viewport,
+     the second wraps to a second line, and its viewport-intersection term drops
+     below the first's. The first would then win on SCORE and this fixture would
+     silently stop testing the tie-break at all — a false pass. Overlapping them
+     guarantees equal rects at any viewport size, so the scores really are equal
+     and `order` in entry.ts's comparator is the only thing left to decide. */
+  video { position: fixed; top: 0; left: 0; }
+</style><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // Determinism matters as much as the outcome: querySelectorAll('*') order is
+  // document order, and the sort must be stable enough that repeated runs pick
+  // the same video. A coin-flip winner would show up in the wild as PiP opening
+  // a different player each click on the same page.
+  document.body.append(makeVideo({ label: "first", width: 640, height: 360 }));
+  document.body.append(makeVideo({ label: "second", width: 640, height: 360 }));
+  ready();
+</script>

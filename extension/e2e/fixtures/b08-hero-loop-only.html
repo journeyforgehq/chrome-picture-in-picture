@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8"><title>B08 — hero background loop, nothing else</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // A 3s muted full-bleed loop is decoration, not content. Popping it out would be
+  // an obviously wrong answer, so the >5s filter must reject it OUTRIGHT — this
+  // returns null, NOT "the best of a bad set".
+  document.body.append(makeVideo({ label: "hero", width: 1600, height: 600, muted: true, duration: 3 }));
+  ready();
+</script>

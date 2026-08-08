@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>B06 — live stream, duration Infinity</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // NO duration override. A canvas captureStream reports duration === Infinity
+  // natively, which is exactly what a live HLS/DASH stream reports, so this is
+  // the real behaviour rather than a defineProperty standing in for it — see
+  // data-fixture-state, which records duration:"Infinity" for this element.
+  //
+  // Infinity is the value the short-clip filter has to special-case: without
+  // the `duration !== Infinity` guard, `!(Infinity > 5)` is false so it would
+  // survive anyway, but `duration < 30` is also false, so a live stream can
+  // never take the advert penalty. Both halves are pinned here.
+  document.body.append(makeVideo({ label: "live" }));
+  ready();
+</script>
