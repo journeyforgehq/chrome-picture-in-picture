@@ -24,7 +24,8 @@
     "e2e:install": "playwright install chromium",
     "e2e:typecheck": "tsc --noEmit -p e2e/tsconfig.json",
     "e2e:live": "playwright test --config playwright.stripe-live.config.ts",
-    "e2e:visual": "playwright test --config playwright.visual.config.ts"
+    "e2e:visual": "playwright test --config playwright.visual.config.ts",
+    "e2e:fixtures": "playwright test --config playwright.fixtures.config.ts"
   },
   "dependencies": {
     "antd": "5.22.5",
