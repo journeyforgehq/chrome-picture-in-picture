@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A07 — content-visibility:auto, offscreen</title>
+<style>.lazy{content-visibility:auto;contain-intrinsic-size:640px 360px}
+       .spacer{height:200vh}</style>
+<body>
+<div class="spacer"></div>
+<div class="lazy" id="host"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // FOUND, but with a LOW intersection score — it is off-screen, not invisible.
+  document.getElementById("host").append(makeVideo({ label: "offscreen", muted: false }));
+  ready();
+</script>

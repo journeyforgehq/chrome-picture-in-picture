@@ -1,0 +1,9 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A03 — two nested open shadow roots deep</title>
+<body>
+<script type="module">
+  import { makeVideo, nestInShadow, ready } from "./lib/harness.js";
+  document.body.append(nestInShadow(makeVideo({ label: "deep", muted: false }), 2));
+  ready();
+</script>

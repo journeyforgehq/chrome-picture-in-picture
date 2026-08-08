@@ -1,0 +1,13 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A04 — closed shadow root</title>
+<body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // Unreachable BY DESIGN. A closed root is the site's decision, and the
+  // requirement is that we degrade to "no video found" rather than crash.
+  const host = document.createElement("div");
+  host.attachShadow({ mode: "closed" }).append(makeVideo({ label: "unreachable" }));
+  document.body.append(host);
+  ready();
+</script>

@@ -29,10 +29,29 @@ interface DetectionCase {
   reason?: string;
   /** Which origin to serve from. "b" = 127.0.0.1:3001, cross-origin to "a". */
   origin?: "a" | "b";
+  /**
+   * Ceiling, in ms, on how long pipEntry may take on this page. Set only on the
+   * fixtures whose SHAPE is the risk — a01 with one video would pass any budget
+   * and would only be measuring Chromium's mood.
+   */
+  maxRuntimeMs?: number;
 }
 
 /** Later tasks append to this array. */
-export const CASES: DetectionCase[] = [{ id: "a01-plain", winner: "only" }];
+export const CASES: DetectionCase[] = [
+  { id: "a01-plain", winner: "only" },
+  { id: "a02-shadow-1", winner: "in-shadow" },
+  { id: "a03-shadow-2", winner: "deep" },
+  { id: "a04-closed-shadow", winner: null, reason: "none-found" },
+  { id: "a05-late-inject", winner: "late" },
+  { id: "a06-dialog", winner: "in-dialog" },
+  { id: "a07-content-visibility", winner: "offscreen" },
+  // 25 videos is where a naive querySelectorAll('*') shadow walk starts to
+  // cost real time. The budget is here so a future O(n^2) traversal shows up
+  // as a red test rather than as a slow extension nobody profiled.
+  { id: "a08-feed-25", winner: "playing-one", maxRuntimeMs: 50 },
+  { id: "a09-reparented", winner: "moved" },
+];
 
 const ORIGINS = { a: "http://localhost:3000", b: "http://127.0.0.1:3001" } as const;
 
@@ -72,5 +91,35 @@ for (const c of CASES) {
 
     expect(result.winner?.label ?? null, context).toBe(c.winner);
     if (c.reason) expect(result.reason, context).toBe(c.reason);
+
+    if (c.maxRuntimeMs !== undefined) {
+      // Timed IN-PAGE, from pipEntry's own source text, so the number is the
+      // function's cost and not the round-trip cost of Playwright's CDP call —
+      // which is tens of ms on its own and would swamp the thing being
+      // measured. Rebuilding from toString() is also exactly what
+      // chrome.scripting.executeScript does in production.
+      //
+      // Median of 5 rather than a single shot: one cold run measures JIT
+      // warm-up, and a single hot run under-reports. A quadratic traversal
+      // moves the median; scheduler noise does not.
+      const samples = await page.evaluate(
+        ({ src, runs }) => {
+          const fn = new Function("return (" + src + ")")() as (o: unknown) => unknown;
+          const out: number[] = [];
+          for (let i = 0; i < runs; i++) {
+            const t0 = performance.now();
+            fn({ dryRun: true });
+            out.push(performance.now() - t0);
+          }
+          return out;
+        },
+        { src: pipEntry.toString(), runs: 5 }
+      );
+      const median = [...samples].sort((x, y) => x - y)[Math.floor(samples.length / 2)];
+      expect(
+        median,
+        `${context}  pipEntry runtime samples (ms): ${samples.map((s) => s.toFixed(2)).join(", ")}\n`
+      ).toBeLessThan(c.maxRuntimeMs);
+    }
   });
 }

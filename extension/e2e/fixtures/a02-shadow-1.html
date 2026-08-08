@@ -1,0 +1,9 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A02 — one open shadow root deep</title>
+<body>
+<script type="module">
+  import { makeVideo, nestInShadow, ready } from "./lib/harness.js";
+  document.body.append(nestInShadow(makeVideo({ label: "in-shadow", muted: false }), 1));
+  ready();
+</script>

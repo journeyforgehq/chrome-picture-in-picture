@@ -1,0 +1,14 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A09 — reparented after load</title>
+<body>
+<div id="a"></div><div id="b"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  const v = makeVideo({ label: "moved", muted: false });
+  document.getElementById("a").append(v);
+  // Identity must survive the move: the winner is resolved by index into a list
+  // built in the same synchronous pass, never by a stale selector.
+  setTimeout(() => document.getElementById("b").append(v), 100);
+  setTimeout(ready, 300);
+</script>
