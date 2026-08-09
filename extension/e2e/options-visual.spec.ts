@@ -62,6 +62,23 @@ for (const vp of [
     await page.locator(".ant-modal-close").first().click();
     await expect(page.locator(".ant-modal-mask")).toBeHidden();
 
+    /* ------------------------------------------------------------------
+     * The one place in this plan where the fidelity baseline predicted an
+     * IMPROVEMENT, so it is measured rather than assumed.
+     *
+     * docs/superpowers/plans/baseline/README.md, defect 1: at 375×667 the
+     * gallery's `scrollWidth` was 394 against a 375 viewport — a 19px sideways
+     * scroll — traced to the two `PopupView` wrappers, each hard-coded to
+     * `width: 360px` and sitting at `left: 32` inside the padded column. It was
+     * the popup surface's defect, not the gallery's, so removing the popup
+     * should remove it. If this ever fails again, something else is over-wide
+     * and the number below tells you by how much.
+     * ----------------------------------------------------------------*/
+    const scrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    // eslint-disable-next-line no-console
+    console.log(`[${vp.name}] documentElement.scrollWidth: ${scrollWidth} (viewport ${vp.width})`);
+    expect(scrollWidth).toBeLessThanOrEqual(vp.width);
+
     const card = page.locator('[data-testid="optionsview-free"]');
     await expect(card).toBeVisible();
 

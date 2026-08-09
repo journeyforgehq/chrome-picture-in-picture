@@ -1,7 +1,11 @@
 // Dev-only preview gallery: mounts every ui-kit component in every
-// representative state, PLUS the popup/options Views in every representative
-// tier/state, wrapped in <ThemeProvider>, so Playwright MCP can screenshot +
+// representative state, PLUS OptionsView in every representative tier/state,
+// wrapped in <ThemeProvider>, so Playwright MCP can screenshot +
 // computed-style-check each state (spec §11A, Plan 2b-ii).
+//
+// This is now the ONLY place LockedFeature renders — it has no production mount
+// until the paid tier adds the Pro rows, and this gallery is what keeps it from
+// rotting in the meantime (decisions log, recorded gap 1).
 import React, { useState, useRef, useEffect } from "react";
 import { createRoot } from "react-dom/client";
 import { Typography, Space, Divider } from "antd";
@@ -18,7 +22,6 @@ import {
 import type { RestoreResult } from "../src/billing/entitlement";
 import type { PipSettings } from "../src/pip/state";
 import type { Plan, PaidStatus } from "../src/contract";
-import { PopupView } from "../src/popup/PopupView";
 import { OptionsView } from "../src/options/OptionsView";
 import { PIP_ERROR_CODES, messageFor, severityFor } from "../src/pip/errors";
 import { showToast } from "../src/pip/toast";
@@ -50,24 +53,6 @@ const RESTORE_STATES: Record<string, RestoreResult | undefined> = {
     error: { status: 429, name: "rate_limited", message: "Too many requests. Please slow down and try again." },
   },
 };
-
-/** Wraps a PopupView instance with its own local paywall-open state, so each
- * gallery card is independently interactive without sharing state. */
-function PopupViewCard({ tier }: { tier: "free" | "pro" }) {
-  const [paywallOpen, setPaywallOpen] = useState(false);
-  return (
-    <div style={{ border: "1px solid #eee", display: "inline-block" }}>
-      <PopupView
-        tier={tier}
-        paywallOpen={paywallOpen}
-        onOpenPaywall={() => setPaywallOpen(true)}
-        onClosePaywall={() => setPaywallOpen(false)}
-        onCheckout={() => {}}
-        plans={PLANS}
-      />
-    </div>
-  );
-}
 
 /** Wraps an OptionsView with its own local paywall + settings state, so each
  * card is independently interactive (clicking a Switch really flips it, which
@@ -199,15 +184,11 @@ function Gallery() {
           ))}
         </Space>
 
-        <Divider orientation="left">PopupView — free</Divider>
-        <div data-testid="popupview-free">
-          <PopupViewCard tier="free" />
-        </div>
-
-        <Divider orientation="left">PopupView — pro</Divider>
-        <div data-testid="popupview-pro">
-          <PopupViewCard tier="pro" />
-        </div>
+        {/* The two PopupView cards used to sit here. They were the gallery's
+            only fixed-width (360px) content and the sole cause of the 19px
+            horizontal overflow the fidelity baseline recorded at 375px
+            (baseline/README.md, defect 1). options-visual.spec.ts now asserts
+            scrollWidth <= viewport, so the fix cannot silently regress. */}
 
         <Divider orientation="left">OptionsView — free</Divider>
         <div data-testid="optionsview-free">

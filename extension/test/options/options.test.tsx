@@ -130,10 +130,10 @@ describe("Options container", () => {
     expect(await screen.findByRole("alert")).toHaveTextContent(/purchase restored/i);
   });
 
-  // Ported from test/popup/popup.test.tsx. options.tsx has carried the
-  // byte-equivalent cached seed all along with no test of its own; the popup —
-  // and therefore that test — is deleted two tasks from now, so the behaviour
-  // needs its coverage HERE before that happens.
+  // Ported from test/popup/popup.test.tsx before that file was deleted.
+  // options.tsx had carried the byte-equivalent cached seed all along with no
+  // test of its own, so without this port the behaviour would have shipped
+  // untested the moment the popup went.
   it("seeds the cached Pro tier immediately (no Free flash) before refresh resolves", async () => {
     getCachedMock.mockResolvedValue({
       tier: "pro",
@@ -148,8 +148,8 @@ describe("Options container", () => {
   });
 
   /* ==========================================================================
-   * THE MONEY PATH'S FIRST STEP. Ported from test/popup/popup.test.tsx, which
-   * is deleted with the popup — the popup's copy stays until then.
+   * THE MONEY PATH'S FIRST STEP. Ported from test/popup/popup.test.tsx before
+   * that file was deleted; this is now the only coverage it has anywhere.
    *
    * `client_reference_id` is not cosmetic. backend/src/billing/webhook.ts reads
    * `checkout.session.completed`'s `client_reference_id` as the device to grant,

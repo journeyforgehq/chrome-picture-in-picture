@@ -164,7 +164,7 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
   chrome.runtime.onMessage.addListener((message, sender) => {
     const msg = message as { type?: string; score?: unknown } | null;
     if (!msg || msg.type !== PIP_SCORE_REPORT) return false;
-    // sender.tab is absent for messages from the options page/popup; frameId
+    // sender.tab is absent for messages from the options page; frameId
     // is 0 for a top frame, so `!frameId` would be wrong here.
     const tabId = sender.tab?.id;
     if (tabId === undefined || sender.frameId === undefined) return false;

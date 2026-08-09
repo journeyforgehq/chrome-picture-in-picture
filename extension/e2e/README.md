@@ -8,10 +8,19 @@ Two loops:
   unpacked extension. Stripe is never called: `harness/webhook.ts` signs webhook
   events with the same test secret the worker verifies against, so
   `billing.spec.ts` drives grant → pro → revoke → re-lock end to end.
-  - `health.spec.ts` — worker up + dist built
-  - `popup-loads.spec.ts` — popup Free, pro tool locked
+  - `health.spec.ts` — worker up + dist built (options.html, content.js, background.js)
   - `identity.spec.ts` — device id generated, cached tier free
   - `billing.spec.ts` — the full billing loop (writes screenshots to `__screens__/`)
+  - `grace.spec.ts` — 7-day offline grace keeps Pro on a fresh cache
+  - `dunning-refund.spec.ts` — past_due keeps Pro + shows the nudge; refund revokes
+  - `renewal-cascade.spec.ts` — two independent installs renewed and revoked together
+  - `restore.spec.ts` — restore a lifetime purchase onto a second device by email
+
+  There is **no popup**: the toolbar button is the feature, so every spec above
+  that needs to read tier state does it on `options.html` via
+  `[data-testid="tier-badge"]`. Four `test.fixme` tests named `PLAN 2: …` are
+  parked, not broken — they hold the Pro-gating assertions until the paid tier
+  adds a gated surface to assert against.
 
 - **Live (`npm run e2e:live`, manual)** — `playwright.stripe-live.config.ts`, a
   documented stub for a human-driven real-purchase run using a real

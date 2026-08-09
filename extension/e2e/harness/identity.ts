@@ -7,7 +7,7 @@ import type { Page } from "@playwright/test";
 
 /**
  * Read the persisted device id from chrome.storage.local. Must be called on an
- * extension page (popup.html/options.html) where chrome.* is available. The key
+ * extension page (options.html) where chrome.* is available. The key
  * "device_id" matches src/billing/device-id.ts.
  */
 export async function readDeviceId(page: Page): Promise<string> {
@@ -20,9 +20,9 @@ export async function readDeviceId(page: Page): Promise<string> {
 }
 
 /**
- * Poll chrome.storage.local until the popup's async init has written the device
- * id, then return it. IMPORTANT: the popup renders its default "free" state on
- * mount BEFORE init completes (src/popup/popup.tsx uses useState<Tier>("free")),
+ * Poll chrome.storage.local until the page's async init has written the device
+ * id, then return it. IMPORTANT: the page renders its default "free" state on
+ * mount BEFORE init completes (src/options/options.tsx uses useState<Tier>("free")),
  * so waiting on the visible "Free" text is NOT a reliable readiness gate for a
  * storage read — the write may not have landed yet. Poll the actual write.
  */

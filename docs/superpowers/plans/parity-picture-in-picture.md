@@ -1,11 +1,20 @@
 # Parity evidence — options page vs. the popup it replaces
 
-**This document is the gate on deleting the popup. Nothing has been deleted.**
-`src/popup/`, `test/popup/`, `e2e/popup-loads.spec.ts`, the webpack `popup`
-entry, its `HtmlWebpackPlugin` and the gallery's two `PopupView` cards are all
-still present, and every number below was produced **with the popup still in the
-tree**. That is deliberate: it proves the options page carries each capability
-*independently*, not merely that nothing else was left pointing at the popup.
+> ## ✅ DELETION PERFORMED — 2026-08-09
+>
+> Authorised by the product owner after this evidence was read. The popup is
+> gone: `src/popup/` (4 files), `test/popup/` (10 tests),
+> `e2e/popup-loads.spec.ts`, the webpack `popup` entry and its
+> `HtmlWebpackPlugin`, and the gallery's two `PopupView` cards.
+> **§7 records what actually happened against what §3 predicted.**
+
+**This document was the gate on deleting the popup, and §1 was written while the
+popup still existed.** That was the point: every ✅ below was obtained with the
+popup still in the tree, which proves the options page carries the capability
+*independently* rather than merely that nothing was left pointing at the popup.
+The §1 table is deliberately **not** rewritten post-deletion — evidence gathered
+after the fact could not have made that distinction, and re-running it now would
+destroy the property that made it worth gathering.
 
 One row per **Preserved** capability of
 `decisions-picture-in-picture.md` — 79 rows, matching that document's
@@ -287,6 +296,9 @@ rather than unfinished work. See §4.
 
 ## 3. What breaks *at* deletion time, and how
 
+*Written before the deletion, as a prediction. **§7 records what actually
+happened** — including the one count that came out different and why.*
+
 Nothing in this list is broken now. Each becomes a failure the moment the popup
 is removed, so each is part of the cost of the deletion.
 
@@ -405,4 +417,134 @@ Findings 3 and 4 are pre-existing debt surfaced by this audit. Finding 2 is half
 closed and half a recorded conscious trade. None of them is made worse by the
 deletion, and none is a reason to keep the popup.
 
-**Deletion remains ungated. Nothing above authorises it.**
+**Deletion was gated on this document. It was read, and it was authorised.**
+§7 below is what happened next.
+
+---
+
+## 7. The deletion, performed — 2026-08-09
+
+Executed against §3 as a checklist. Everything in §3 was hit; two things §3 did
+not anticipate are recorded at the end.
+
+### Counts: predicted vs. actual
+
+| | Predicted (§3) | Actual | |
+|---|---|---|---|
+| Unit tests | 279 → **269** (−10) | 279 → **270** (−9) | ⚠️ off by one, explained below |
+| Unit test files | 41 → 39 | 41 → **39** | ✅ |
+| E2E specs collected | 13 → **12** | 13 → **12** | ✅ |
+| E2E passing | 9 → 8 | 9 → **8** (+4 parked, unchanged) | ✅ |
+| Fixtures | 45 | **45** | ✅ |
+| Visual | 4 | **4** | ✅ |
+| CORE drift | 2 → 3 predicted at deletion | **3** | ✅ |
+
+**The −10 prediction was right; the net is −9 because one test was added in the
+same pass.** The 10 popup unit tests all went, and
+`test/webpack-config.test.ts > webpack.prod.cjs > keeps a chunk named \`content\`
+in existence, so the separation guard stays armed` came in. `279 − 10 + 1 = 270`.
+Stating it as a bare −9 would have hidden the fact that every predicted deletion
+did happen.
+
+### The guard this deletion earned
+
+`webpack/separation-guard.cjs` opens with `if (!contentChunk) return;` — recorded
+as inventory row 59, a silent no-op if no chunk is named `content`, and the only
+thing keeping antd and ui-kit out of the bundle injected into arbitrary pages.
+The way to disarm it is not to edit it; it is to edit the entry map in
+`webpack.common.cjs` — which is exactly what removing the `popup` entry did.
+
+```
+✓ test/webpack-config.test.ts > webpack.prod.cjs > keeps a chunk named `content` in existence, so the separation guard stays armed
+```
+
+`test/separation.test.ts` proves the guard *works*; this proves it is *armed*.
+The entry itself now carries a comment saying so, so the next person editing that
+map is told before they touch it.
+
+`test/webpack-config.test.ts` also now asserts the popup's **absence**
+(`assetsByChunkName?.popup` undefined, no `popup.html` asset) rather than merely
+dropping the old assertion — a re-added entry or a stray `HtmlWebpackPlugin`
+fails rather than quietly shipping a dead page. `e2e/health.spec.ts` does the
+same on disk, and gained `content.js` / `background.js` existence checks while it
+was being edited: nothing else in the hermetic suite would notice an entry
+silently ceasing to be emitted.
+
+### The baseline's one predicted improvement — measured, and real
+
+`baseline/README.md` defect 1 recorded a **19px horizontal overflow** in the
+preview gallery at 375×667: `document.documentElement.scrollWidth` = 394 against
+a 375 viewport, traced to the two `PopupView` wrappers, each hard-coded to
+`width: 360px` at `left: 32`. It was the only place in this plan where the
+baseline predicted the rebuild would make something *better*.
+
+Measured rather than assumed, by adding the assertion to
+`e2e/options-visual.spec.ts` and running it **before** the deletion:
+
+```
+[mobile] documentElement.scrollWidth: 394 (viewport 375)
+  ✘  2 options-visual.spec.ts:54:3 › options page renders and themes its controls @mobile
+    Expected: <= 375
+    Received:    394
+```
+
+and again after:
+
+```
+[desktop] documentElement.scrollWidth: 1280 (viewport 1280)
+  ✓  1 options-visual.spec.ts:54:3 › options page renders and themes its controls @desktop
+[mobile] documentElement.scrollWidth: 375 (viewport 375)
+  ✓  2 options-visual.spec.ts:54:3 › options page renders and themes its controls @mobile
+```
+
+**394 → 375. The baseline's diagnosis was exactly right, and the page no longer
+scrolls sideways on a phone.** The assertion stays in the spec so it cannot
+silently regress; the gallery carries a comment at the old card site explaining
+what used to be there and why its absence is now load-bearing.
+
+### Screenshots re-taken and looked at
+
+Removing the two `PopupView` cards shifts everything below them up the page, so
+`options-free-desktop.png` and `options-free-mobile.png` both changed — by
+**exactly 1px of height** (886→887 desktop, 1148→1149 mobile) with ~1-2% of
+pixels differing. The diff image showed every text line ghosted by a uniform 1px
+offset: a rasterization shift from the card's new y-position, not a content
+change.
+
+Both new snapshots were opened and inspected, not just regenerated. Desktop
+renders all five rows in order (Keyboard shortcut, Support embedded players, Show
+status messages, Your plan, Restore purchase), the Free badge, "No plan", the
+Upgrade button, the restore form and the privacy footer — and none of the four
+Pro rows. Mobile shows the `@media (max-width: 480px)` reflow behaving: controls
+stack under their labels and the restore form's email field and submit each take
+a full row, which is baseline item 5 ("layout changes that are correct, not
+defects") landing as designed. No clipping, no overlap, no overflow.
+
+### Two things §3 did not anticipate
+
+1. **Stale prose in four files.** §3 listed code and config references but not
+   comments. `preview/gallery.tsx`'s header, two comment blocks in
+   `test/options/options.test.tsx` that said the popup's copy "stays until then",
+   and a `sender.tab` note in `src/background/background.ts` all still described
+   the popup in the present tense. Fixed. Comments in CORE-vendored files
+   (`PlanBadge.tsx`, `theme.ts`, `device-id.ts`) were deliberately left — drifting
+   a vendored file for a passing mention is not worth a `sync-core` conflict.
+2. **`e2e/README.md` needed more than the one line §3 named.** Its hermetic spec
+   list only ever described four of the seven specs. Rewritten to list all seven
+   and to state plainly that there is no popup and that the four `PLAN 2:` fixmes
+   are parked rather than broken.
+
+### Still open after the deletion
+
+Unchanged by it, and none of it caused by it:
+
+- **Row 65 / finding 3** — nothing renders the real `$9.99` single-plan card. The
+  preview gallery still carries a two-plan fixture (`$29/yr` + `$79 once`) so the
+  multi-plan paywall layout stays visually verifiable for plan 2, which means the
+  one-plan branch users actually see is still unrendered in any test.
+- **Row 9 / finding 5** — `LockedFeature` has no production mount. The gallery is
+  now, as intended, its only rendering; the four `PLAN 2:` fixmes hold its e2e
+  assertions.
+- **Rows 40, 43** — the `background` / `action` `toEqual` shapes stay off, as
+  decided.
+- **Row 93** — `npm run build:zip` still not run in either pass.
