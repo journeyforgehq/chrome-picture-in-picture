@@ -7,7 +7,8 @@ import { pipEntry } from "../pip/entry";
 import type { PipEntryResult } from "../pip/entry";
 import { showToast } from "../pip/toast";
 import { messageFor, severityFor } from "../pip/errors";
-import { getSettings, setActivePip, clearActivePip } from "../pip/state";
+import { getSettings, setSettings, setActivePip, clearActivePip } from "../pip/state";
+import { ensureRegistered, ensureUnregistered } from "./registration";
 
 export interface InstalledDetails {
   reason: string; // chrome.runtime.OnInstalledReason, kept as string for pure-function testability
@@ -183,6 +184,48 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
         if (next !== all) await writeFrameScores(next);
       })
       .catch(() => undefined);
+  });
+
+  /* ==========================================================================
+   * Embedded-player content-script registration lifecycle. See
+   * src/background/registration.ts for why every call there is guarded.
+   * ========================================================================*/
+
+  // Restart survival is UNVERIFIED. The automated spike could not settle it:
+  // Chrome treated every relaunch of an unpacked extension as a fresh
+  // install, onStartup never fired, and there is no automated path to an
+  // extension Chrome considers "installed". This re-assert is correct
+  // EITHER WAY — if registrations do survive a restart this is a harmless
+  // no-op (ensureRegistered guards on getRegisteredContentScripts first); if
+  // they do not survive, this is what re-establishes them. Leave it until a
+  // human verifies restart behaviour manually.
+  chrome.runtime.onStartup?.addListener(() => {
+    void (async () => {
+      const settings = await getSettings();
+      if (settings.embeddedPlayers) await ensureRegistered();
+    })();
+  });
+
+  // LOAD-BEARING, not belt-and-braces. A spike measured that Chrome does NOT
+  // auto-unregister a dynamically-registered content script when the host
+  // permission it depended on is revoked from chrome://extensions: with
+  // permissions.getAll().origins reduced to [], the script was still
+  // registered and still ran on every page. Without this listener the
+  // content script would keep running after the user believes they revoked
+  // access, which would make the store listing's central claim false.
+  chrome.permissions.onRemoved?.addListener(() => {
+    void (async () => {
+      await ensureUnregistered();
+      await setSettings({ embeddedPlayers: false });
+    })();
+  });
+
+  chrome.permissions.onAdded?.addListener((p) => {
+    if (!p.origins?.includes("<all_urls>")) return;
+    void (async () => {
+      await setSettings({ embeddedPlayers: true });
+      await ensureRegistered();
+    })();
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
