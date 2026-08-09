@@ -1,33 +1,53 @@
 import { defineConfig } from "@playwright/test";
 
-// THREE Playwright configs, one job each. Before adding a fourth, check that
-// none of these already owns your suite:
+// THREE Playwright configs. THE RULE: one config per EXTERNAL DEPENDENCY, not
+// one per suite. Before adding a fourth, name the dependency it needs that none
+// of these already brings — if you cannot, it belongs in an existing one.
 //
-//   playwright.config.ts          — the billing e2e suite. Its globalSetup
-//                                   builds the extension and spawns a local
-//                                   wrangler worker; specs load the extension
-//                                   in a persistent context. Slow by nature.
-//   playwright.visual.config.ts   — gallery pixel checks. Brings its own
-//                                   webServer on :4173 (preview build), and
-//                                   asserts computed style + screenshots.
-//   playwright.fixtures.config.ts — THIS ONE. Detection fixtures: pure DOM
-//                                   scoring via pipEntry({ dryRun: true }) on
-//                                   static pages the spec serves itself from
-//                                   e2e/serve.ts (localhost:3000 +
-//                                   127.0.0.1:3001, two origins so the iframe
-//                                   cases are genuinely cross-origin).
+//   playwright.config.ts          — needs a WRANGLER WORKER. Its globalSetup
+//                                   builds the extension and spawns one; specs
+//                                   load the extension in a persistent context.
+//                                   Slow by nature.
+//   playwright.visual.config.ts   — needs the PREVIEW GALLERY. Brings its own
+//                                   webServer on :4173, asserts computed style
+//                                   + screenshots.
+//   playwright.fixtures.config.ts — THIS ONE. Needs NOTHING: the specs serve
+//                                   their own static pages from e2e/serve.ts
+//                                   (localhost:3000 + 127.0.0.1:3001, two
+//                                   origins so the iframe cases are genuinely
+//                                   cross-origin). Two specs qualify:
 //
-// Deliberately NO globalSetup and NO webServer here. Detection needs neither
-// the wrangler worker nor the preview gallery, and this is the suite that gets
-// run hundreds of times while ~40 fixtures are written — a wrangler dependency
-// would make it needlessly slow and fragile. Keep it that way.
+//                                     detection.spec.ts — ~40 fixtures scoring
+//                                       via pipEntry({ dryRun: true }); no
+//                                       gesture, no PiP call.
+//                                     gesture.spec.ts   — the real
+//                                       requestPictureInPicture() call under a
+//                                       real page.click(), plus a no-gesture
+//                                       control.
 //
-// The main config testIgnores **/detection.spec.ts and the visual config's
-// testMatch never sees it, so no suite can silently start depending on
-// another's fixtures.
+// gesture.spec.ts lives here rather than in a fourth config because it needs
+// the same two things detection needs and nothing else: these self-served
+// fixture pages, and the autoplay flag below. MEASURED, not assumed: real PiP
+// entry and exit both work HEADLESS in this Chromium — document.pictureInPicture
+// Element is set, the PictureInPictureWindow reports real dimensions, and the
+// no-gesture control still gets its NotAllowedError. Add --headed to watch the
+// floating windows appear; nothing in either spec requires it.
+//
+// Deliberately NO globalSetup and NO webServer. Neither spec needs the wrangler
+// worker or the preview gallery, and this is the suite that gets run hundreds
+// of times while fixtures are written — a wrangler dependency would make it
+// needlessly slow and fragile. Keep it that way.
+//
+// workers:1 + fullyParallel:false is also load-bearing here, not just tidiness:
+// both specs bind ports 3000/3001 in their own beforeAll, so they must never
+// run concurrently.
+//
+// The main config testIgnores both of these and the visual config's testMatch
+// never sees them, so no suite can silently start depending on another's
+// fixtures.
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "**/detection.spec.ts",
+  testMatch: "**/{detection,gesture}.spec.ts",
   workers: 1,
   fullyParallel: false,
   timeout: 30_000,

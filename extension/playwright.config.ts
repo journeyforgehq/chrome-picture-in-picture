@@ -10,10 +10,10 @@ export default defineConfig({
   testDir: "./e2e",
   testMatch: "**/*.spec.ts",
   // Visual specs need the preview gallery on :4173, not this suite's worker
-  // backend. They run under playwright.visual.config.ts instead. Detection
-  // fixtures need neither the worker nor the gallery — they serve themselves —
-  // and run under playwright.fixtures.config.ts.
-  testIgnore: ["**/*-visual.spec.ts", "**/detection.spec.ts"],
+  // backend. They run under playwright.visual.config.ts instead. The detection
+  // and gesture specs need neither the worker nor the gallery — they serve
+  // themselves — and run under playwright.fixtures.config.ts.
+  testIgnore: ["**/*-visual.spec.ts", "**/detection.spec.ts", "**/gesture.spec.ts"],
   workers: 1,
   fullyParallel: false,
   timeout: STAGING ? 120_000 : 60_000,
