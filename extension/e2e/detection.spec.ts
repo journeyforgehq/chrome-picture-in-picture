@@ -38,6 +38,17 @@ interface DetectionCase {
    * and would only be measuring Chromium's mood.
    */
   maxRuntimeMs?: number;
+  /**
+   * Second assertion for fixtures that RE-LAY-OUT on scroll. Scrolls to `y`,
+   * waits until the video has actually landed under `underSelector` (the page's
+   * own scroll handler does the move, and asserting before it ran would measure
+   * the first state twice), then re-runs pipEntry and expects `winner` again.
+   *
+   * Deliberately does NOT feed the golden matrix: the recorded score vector
+   * stays the pre-scroll one, so the golden keeps meaning "one row per fixture"
+   * rather than silently becoming "one row per fixture, except this one".
+   */
+  scrollRecheck?: { y: number; underSelector: string; winner: string };
 }
 
 /** Later tasks append to this array. */
@@ -73,6 +84,35 @@ export const CASES: DetectionCase[] = [
   { id: "b10-unmuted-paused-vs-muted-playing", winner: "muted-playing" },
   { id: "b11-exactly-100", winner: "at-boundary" },
   { id: "b12-99px", winner: null, reason: "none-found" },
+
+  // --- Group C: visibility filters. What counts as "the user can see it". ---
+  { id: "c01-display-none", winner: null, reason: "none-found" },
+  { id: "c02-visibility-hidden", winner: null, reason: "none-found" },
+  { id: "c03-opacity-005", winner: null, reason: "none-found" },
+  { id: "c04-width-zero", winner: null, reason: "none-found" },
+  { id: "c05-covered-by-overlay", winner: "covered" },
+  {
+    id: "c06-sticky-miniplayer",
+    winner: "sticky",
+    // Found inline AND found again after the page reparents it into the fixed
+    // corner — the shape that broke every naive "cache the element on load"
+    // implementation. Both states, one fixture.
+    scrollRecheck: { y: 500, underSelector: "#corner video", winner: "sticky" },
+  },
+  { id: "c07-ancestor-display-none", winner: null, reason: "none-found" },
+
+  // --- Group D: site-imposed blocks and error paths. ------------------------
+  { id: "d01-disable-property", winner: null, reason: "pip-disabled-by-site" },
+  { id: "d02-disable-attr-late", winner: null, reason: "pip-disabled-by-site" },
+  // EXPECTATION CORRECTED BY MEASUREMENT. This case was specified as
+  // winner:"blocked-by-policy" on the theory that Permissions-Policy gates only
+  // requestPictureInPicture(). Chrome disagrees: the header also sets
+  // document.pictureInPictureEnabled to false (verified false here, true on
+  // a01-plain from the same server), and entry.ts's capability guard returns
+  // before any video is collected. See the fixture for the full measurement.
+  { id: "d03-permissions-policy", winner: null, reason: "pip-unavailable" },
+  { id: "d04-empty", winner: null, reason: "none-found" },
+  { id: "d05-no-src", winner: null, reason: "not-ready" },
 ];
 
 const ORIGINS = { a: "http://localhost:3000", b: "http://127.0.0.1:3001" } as const;
@@ -230,6 +270,23 @@ for (const c of CASES) {
 
     expect(result.winner?.label ?? null, context).toBe(c.winner);
     if (c.reason) expect(result.reason, context).toBe(c.reason);
+
+    if (c.scrollRecheck) {
+      const { y, underSelector, winner } = c.scrollRecheck;
+      await page.evaluate((to) => window.scrollTo(0, to), y);
+      // Wait for the PAGE to have moved the element, not for a guessed delay:
+      // the reparent happens in the fixture's own scroll listener, and
+      // re-running pipEntry before it fired would just measure state one again
+      // and call it a pass.
+      await page.waitForFunction((sel) => !!document.querySelector(sel), underSelector);
+
+      const after = await page.evaluate(pipEntry, { dryRun: true });
+      expect(
+        after.winner?.label ?? null,
+        `\n  after scrollTo(0, ${y}) — expected the reparented player to still win` +
+          `\n  pipEntry result: ${JSON.stringify(after)}\n`
+      ).toBe(winner);
+    }
 
     if (c.maxRuntimeMs !== undefined) {
       // Timed IN-PAGE, from pipEntry's own source text, so the number is the

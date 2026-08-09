@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>C07 — video inside a display:none ancestor</title>
+<style>#wrap{display:none}</style><body>
+<div id="wrap"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // This is NOT a happy-dom quirk — Chrome behaves the same way.
+  // getComputedStyle(child).display returns the CHILD's own display even when an
+  // ancestor is display:none, so the §2.4 `display:none` filter NEVER catches
+  // ancestor-hidden videos. What actually excludes them in a real browser is the
+  // 0x0 getBoundingClientRect, via the 100px minimum.
+  //
+  // The unit layer cannot prove this at all: happy-dom has no layout engine, so
+  // its rects are stubbed by the test helper and the 0x0 safety net does not
+  // exist there. THIS FIXTURE IS THE ONLY PLACE THE BEHAVIOUR IS REAL.
+  document.getElementById("wrap").append(makeVideo({ label: "hidden-by-parent", muted: false, duration: 600 }));
+  ready();
+</script>

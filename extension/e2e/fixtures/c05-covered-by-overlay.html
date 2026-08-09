@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>C05 — fully covered by an opaque overlay</title>
+<style>#veil{position:fixed;inset:0;background:#000;z-index:9}</style><body>
+<div id="veil"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // INCLUDED, deliberately. Occlusion is not invisibility — and users reach for
+  // picture-in-picture precisely to escape overlays like this one. A filter that
+  // treated "covered" as "hidden" would break the product's best use case.
+  document.body.append(makeVideo({ label: "covered", muted: false, duration: 600 }));
+  ready();
+</script>

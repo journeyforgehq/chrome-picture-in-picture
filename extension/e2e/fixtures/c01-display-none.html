@@ -1,0 +1,23 @@
+<!doctype html><meta charset="utf-8"><title>C01 — display:none on the video itself</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // display:none set directly on the <video>, which is the shape the §2.4
+  // computed-style filter was written for.
+  //
+  // MEASURED, so the fixture does not overclaim about which line rejects it:
+  // Chrome reports rect 0x0 AND getComputedStyle(v).display === "none" here, and
+  // entry.ts checks the 100px minimum BEFORE it reads computed style — so the
+  // geometry net fires first and `style.display === "none"` is never reached.
+  // In a real browser that branch is unreachable by construction: nothing with
+  // display:none can produce a rect >= 100px. It earns its keep only in the unit
+  // layer, where happy-dom has no layout engine and rects are stubbed.
+  //
+  // What is pinned here is the OUTCOME — a display:none video is never a
+  // candidate, and the answer is "none-found" — not the identity of the line
+  // that got there first. Contrast C07, where the style filter genuinely cannot
+  // help and the 0x0 rect is the only thing standing in the way.
+  const v = makeVideo({ label: "hidden", muted: false, duration: 600 });
+  v.style.display = "none";
+  document.body.append(v);
+  ready();
+</script>

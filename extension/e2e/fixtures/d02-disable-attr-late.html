@@ -1,0 +1,13 @@
+<!doctype html><meta charset="utf-8"><title>D02 — disablepictureinpicture added after load</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // Sites add this dynamically when a DRM stream starts, so a late addition
+  // must be respected exactly like a static one. Detection reads the DOM at
+  // CLICK time (A05's promise, from the other direction): whatever the page
+  // decided since load is what counts, and a cached candidate list would pop
+  // out a video the site just forbade.
+  const v = makeVideo({ label: "blocked", muted: false, duration: 600 });
+  document.body.append(v);
+  setTimeout(() => v.setAttribute("disablepictureinpicture", ""), 100);
+  setTimeout(ready, 300);
+</script>

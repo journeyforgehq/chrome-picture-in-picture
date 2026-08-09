@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>D04 — a page with no video at all</title><body>
+<script type="module">
+  import { ready } from "./lib/harness.js";
+  // The overwhelmingly common case in the wild: the user clicks the toolbar
+  // button on a page that simply has no video. It must return "none-found"
+  // calmly — no throw, no empty PiP window, nothing for the user to interpret
+  // beyond one honest toast. This is also the degenerate input for the shadow
+  // walk and the sort, both of which must survive zero candidates.
+  ready();
+</script>

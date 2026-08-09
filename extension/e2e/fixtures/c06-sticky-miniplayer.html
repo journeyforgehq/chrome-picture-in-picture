@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>C06 — reparents into a fixed corner on scroll</title>
+<style>.push{height:200vh}
+       #corner{position:fixed;right:12px;bottom:12px;width:320px;height:180px}</style><body>
+<div id="inline"></div><div class="push"></div><div id="corner"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // The news-site sticky mini-player. Must be found in BOTH states — the runner
+  // scrolls between two assertions.
+  const v = makeVideo({ label: "sticky", muted: false, duration: 600 });
+  document.getElementById("inline").append(v);
+  addEventListener("scroll", () => {
+    if (scrollY > 100 && v.parentElement.id !== "corner") {
+      v.style.width = "320px"; v.style.height = "180px";
+      document.getElementById("corner").append(v);
+    }
+  }, { passive: true });
+  ready();
+</script>

@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><title>C03 — opacity:.05, under the 0.1 cutoff</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // Effectively invisible, but fully laid out and fully playing: rect,
+  // readyState and duration all pass. Only the opacity <= 0.1 cutoff rejects
+  // it. The cutoff is not zero on purpose — a 0.05 video is a fade-in artefact
+  // or a tracking player, not something the user asked to watch.
+  const v = makeVideo({ label: "hidden", muted: false, duration: 600 });
+  v.style.opacity = "0.05";
+  document.body.append(v);
+  ready();
+</script>

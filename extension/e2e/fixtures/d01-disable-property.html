@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><title>D01 — disablePictureInPicture property</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  const v = makeVideo({ label: "blocked", muted: false, duration: 600 });
+  // Set the PROPERTY, not just the attribute. The unit tests only ever exercise
+  // the hasAttribute() branch, because happy-dom does not implement
+  // disablePictureInPicture as a property at all. Chrome DOES populate it, and
+  // that is the branch a real user hits.
+  v.disablePictureInPicture = true;
+  document.body.append(v);
+  ready();
+</script>

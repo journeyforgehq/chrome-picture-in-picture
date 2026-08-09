@@ -244,6 +244,28 @@
         "score": 1515
       }
     ],
-    "b12-99px": []
+    "b12-99px": [],
+    "c01-display-none": [],
+    "c02-visibility-hidden": [],
+    "c03-opacity-005": [],
+    "c04-width-zero": [],
+    "c05-covered-by-overlay": [
+      {
+        "label": "covered",
+        "score": 2000
+      }
+    ],
+    "c06-sticky-miniplayer": [
+      {
+        "label": "sticky",
+        "score": 2000
+      }
+    ],
+    "c07-ancestor-display-none": [],
+    "d01-disable-property": [],
+    "d02-disable-attr-late": [],
+    "d03-permissions-policy": [],
+    "d04-empty": [],
+    "d05-no-src": []
   }
 }

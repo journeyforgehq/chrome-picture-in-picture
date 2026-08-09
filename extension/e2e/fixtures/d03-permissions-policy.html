@@ -1,0 +1,29 @@
+<!doctype html><meta charset="utf-8"><title>D03 — Permissions-Policy: picture-in-picture=()</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // serve.ts sends the REAL header for any d03* path — a <meta> tag cannot set it.
+  // VERIFIED on the wire: `permissions-policy: picture-in-picture=()` is present
+  // on both the node fetch and the Chromium response for this URL.
+  //
+  // THE FIXTURE WAS WRITTEN EXPECTING "detection still finds the video, and only
+  // the CALL is blocked". CHROME SAYS OTHERWISE, and the measurement wins:
+  //
+  //   document.pictureInPictureEnabled === false   on this page
+  //   document.pictureInPictureEnabled === true    on a01-plain (same server,
+  //                                                 same everything, no header)
+  //
+  // The policy is not merely a gate on requestPictureInPicture() — it flips the
+  // document-level capability flag. entry.ts checks that flag BEFORE it walks
+  // the DOM, so it returns reason "pip-unavailable" with an empty candidate
+  // list; the video is never collected, let alone scored. Note the block is at
+  // the DOCUMENT level, not the element: video.disablePictureInPicture is still
+  // false here, so D01/D02's "pip-disabled-by-site" is a genuinely different
+  // path with a genuinely different message.
+  //
+  // That early return is the better behaviour, not a bug to route around: the
+  // user is told "picture-in-picture is unavailable on this page" instead of
+  // watching a winner get picked and then fail. This fixture pins it so nobody
+  // "fixes" entry.ts to score first and throw later.
+  document.body.append(makeVideo({ label: "blocked-by-policy", muted: false, duration: 600 }));
+  ready();
+</script>
