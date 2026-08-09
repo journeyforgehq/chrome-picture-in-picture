@@ -6,7 +6,7 @@
  *   chrome.scripting.executeScript({ func: pipEntry })
  * which serializes it with Function.prototype.toString() and evaluates the
  * resulting SOURCE TEXT inside the target frame. The module this file compiles
- * to does not exist over there. Three rules follow, all of them measured
+ * to does not exist over there. Four rules follow, all of them measured
  * rather than assumed:
  *
  * 1. NO OUTSIDE IDENTIFIERS. The body may not reference anything declared
@@ -17,13 +17,38 @@
  *    .toString() ever sees the source.) test/pip/entry.test.ts rebuilds this
  *    function from its own source text in a bare scope to catch violations.
  *
- * 2. NO `await` ABOVE requestPictureInPicture(). Transient user activation is
- *    spent by the first suspension point, and PiP then throws
- *    NotAllowedError. Two spike runs died on this — the second one inside the
- *    fix for the first. The whole function is synchronous, and it stays that
- *    way. A test asserts no `await` appears before the call in the source.
+ * 2. NO `await` ANYWHERE, AND NOTHING MAY SUSPEND ABOVE
+ *    requestPictureInPicture(). Transient user activation is spent by the first
+ *    suspension point, and PiP then fails with NotAllowedError. Two spike runs
+ *    died on this — the second one inside the fix for the first.
  *
- * 3. THIS FRAME MAY NOT BE THE ONE THAT ACTS. Every frame gets injected, and a
+ *    The precise invariant is "the CALL happens synchronously inside the
+ *    gesture turn", not "the function returns synchronously". The activation is
+ *    already spent by the time the call returns, so observing its RESULT costs
+ *    nothing — and the real-PiP branch does exactly that, returning
+ *    `promise.then(...)` so an asynchronous rejection is reported instead of
+ *    swallowed (see rule 3). It uses `.then`, never `async`/`await`: three
+ *    tests in test/pip/entry.test.ts assert that no `await` appears anywhere in
+ *    this source and that pipEntry is not an async function.
+ *
+ *    THE dryRun PATH STAYS STRICTLY SYNCHRONOUS. content.ts's localScore()
+ *    temporarily lifts window.__pipCoord around a dryRun call and relies on
+ *    nothing being able to observe the window in between. Only the real-PiP
+ *    branch is ever thenable; a test pins that too.
+ *
+ * 3. REPORT THE ASYNCHRONOUS REJECTION. MEASURED: a gesture-less
+ *    requestPictureInPicture() does NOT throw — it returns a promise and
+ *    rejects it with NotAllowedError, so a try/catch around the call sees
+ *    nothing. This function used to swallow that with `.catch(() => {})` and
+ *    return an optimistic PIP_OK, which made background/action.ts's
+ *    SecurityError -> IFRAME_BLOCKED and NotAllowedError -> PIP_UNAVAILABLE
+ *    toasts UNREACHABLE: the user clicked, no window opened, and nothing was
+ *    said. For a product whose only feedback channel is that toast, silence on
+ *    failure is the worst possible outcome. Both failure shapes — synchronous
+ *    throw and asynchronous rejection — now return the same
+ *    { outcome: "THREW", errorName } result.
+ *
+ * 4. THIS FRAME MAY NOT BE THE ONE THAT ACTS. Every frame gets injected, and a
  *    measurement caught three frames all calling PiP with the last one
  *    silently winning. Arbitration is pre-computed by the content script into
  *    window.__pipCoord = { isWinner }. When that is absent — the ordinary case
@@ -58,7 +83,16 @@ export interface PipEntryResult {
   errorName?: string;
 }
 
-export function pipEntry(options: PipEntryOptions = {}): PipEntryResult {
+/**
+ * dryRun is synchronous BY CONTRACT — see rule 2. The overload keeps that
+ * promise in the type system so content.ts's localScore() can read .winner off
+ * the result without a cast, and so a future edit that made the dryRun path
+ * thenable would fail to compile rather than silently turn localScore's
+ * __pipCoord lift into a race.
+ */
+export function pipEntry(options: PipEntryOptions & { dryRun: true }): PipEntryResult;
+export function pipEntry(options?: PipEntryOptions): PipEntryResult | Promise<PipEntryResult>;
+export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promise<PipEntryResult> {
   const dryRun = options.dryRun === true;
   const isTop = window === window.top;
   const frame: "TOP" | "SUBFRAME" = isTop ? "TOP" : "SUBFRAME";
@@ -195,32 +229,47 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult {
     return { frame, acted: true, winner: best.candidate, candidates: candidates };
   }
 
-  // NOTHING may suspend above this line — see rule 2 in the header block.
-  try {
-    const entering = best.el.requestPictureInPicture();
-    if (entering && typeof entering.catch === "function") {
-      entering.catch(function () {
-        /* rejected asynchronously; the caller reports via its own channel */
-      });
-    }
-    return {
-      frame,
-      acted: true,
-      winner: best.candidate,
-      candidates: candidates,
-      outcome: "PIP_OK",
-    };
-  } catch (err) {
-    // Not `instanceof Error`: the throw can cross a realm boundary, and the
-    // page's Error is a different constructor than ours.
-    const thrown = err as { name?: string } | null | undefined;
+  // ONE shape for BOTH failure modes. PiP can fail two ways — a synchronous
+  // throw, and a promise rejection — and the two used to be reported
+  // differently (the rejection was not reported at all). Building the result in
+  // one place is what keeps them from drifting apart again.
+  //
+  // Not `instanceof Error`: the failure can cross a realm boundary, where the
+  // page's Error is a different constructor than ours.
+  const failed = function (err: { name?: string } | null | undefined): PipEntryResult {
     return {
       frame,
       acted: true,
       winner: best.candidate,
       candidates: candidates,
       outcome: "THREW",
-      errorName: (thrown && thrown.name) || "Error",
+      errorName: (err && err.name) || "Error",
     };
+  };
+  const entered: PipEntryResult = {
+    frame,
+    acted: true,
+    winner: best.candidate,
+    candidates: candidates,
+    outcome: "PIP_OK",
+  };
+
+  // NOTHING may suspend above this line — see rule 2 in the header block.
+  // (The two declarations above are plain assignments; they cannot suspend.)
+  try {
+    const entering = best.el.requestPictureInPicture();
+
+    // The activation was already spent by the call above, so observing the
+    // result costs nothing — and NOT observing it is what made the failure
+    // toasts unreachable. `.then`, never async/await: see rule 2. Guarded
+    // rather than assumed: a stub or an older engine may return undefined.
+    if (entering && typeof entering.then === "function") {
+      return entering.then(function () {
+        return entered;
+      }, failed);
+    }
+    return entered;
+  } catch (err) {
+    return failed(err as { name?: string } | null | undefined);
   }
 }

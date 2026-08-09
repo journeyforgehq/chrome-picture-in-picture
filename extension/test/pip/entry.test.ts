@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { pipEntry } from "../../src/pip/entry";
 
 /** Build a <video> whose media properties happy-dom does not simulate. */
@@ -170,5 +170,74 @@ describe("pipEntry — synchronicity is a contract, not an implementation detail
     document.body.innerHTML = "";
     const r = pipEntry({ dryRun: true }) as unknown as { then?: unknown };
     expect(typeof r.then).toBe("undefined");
+  });
+});
+
+describe("pipEntry — a rejected requestPictureInPicture must be REPORTED", () => {
+  // MEASURED IN A REAL BROWSER (e2e/gesture.spec.ts): a gesture-less
+  // requestPictureInPicture() does not throw. It returns a promise and rejects
+  // it asynchronously, so the try/catch around the call never fires.
+  //
+  // This branch used to swallow that rejection and return PIP_OK, which made
+  // BOTH error-name branches of background/action.ts's decideOutcome
+  // unreachable in production — SecurityError -> IFRAME_BLOCKED and
+  // NotAllowedError -> PIP_UNAVAILABLE. The user clicked, no window opened, and
+  // the extension's only feedback channel said nothing. These tests are what
+  // keep that fixed.
+  function stubRequest(impl: () => Promise<void> | never): void {
+    Object.defineProperty(HTMLVideoElement.prototype, "requestPictureInPicture", {
+      value: impl,
+      configurable: true,
+      writable: true,
+    });
+  }
+
+  // The stub lives on a shared prototype, so it MUST be removed again — leaving
+  // it in place would silently change the environment for every test that runs
+  // after this block, which is exactly the class of bug this file guards.
+  afterEach(() => {
+    delete (HTMLVideoElement.prototype as unknown as Record<string, unknown>)
+      .requestPictureInPicture;
+  });
+
+  it("reports a SecurityError rejection as THREW — the IFRAME_BLOCKED path", async () => {
+    video({ label: "v" });
+    stubRequest(() => Promise.reject(new DOMException("x", "SecurityError")));
+
+    const r = await pipEntry({});
+    expect(r.outcome).toBe("THREW");
+    expect(r.errorName).toBe("SecurityError");
+    expect(r.acted).toBe(true);
+    expect(r.winner?.label).toBe("v");
+  });
+
+  it("reports a NotAllowedError rejection as THREW — the PIP_UNAVAILABLE path", async () => {
+    video({ label: "v" });
+    stubRequest(() => Promise.reject(new DOMException("x", "NotAllowedError")));
+
+    const r = await pipEntry({});
+    expect(r.outcome).toBe("THREW");
+    expect(r.errorName).toBe("NotAllowedError");
+  });
+
+  it("still reports PIP_OK when the promise resolves", async () => {
+    video({ label: "v" });
+    stubRequest(() => Promise.resolve());
+
+    const r = await pipEntry({});
+    expect(r.outcome).toBe("PIP_OK");
+    expect(r.winner?.label).toBe("v");
+  });
+
+  it("still reports a SYNCHRONOUS throw as THREW, with the same shape", async () => {
+    video({ label: "v" });
+    stubRequest(() => {
+      throw new DOMException("x", "InvalidStateError");
+    });
+
+    const r = await pipEntry({});
+    expect(r.outcome).toBe("THREW");
+    expect(r.errorName).toBe("InvalidStateError");
+    expect(r.acted).toBe(true);
   });
 });

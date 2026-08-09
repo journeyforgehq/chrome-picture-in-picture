@@ -44,9 +44,23 @@
     // ran and pipEntry returned nothing".
     if (typeof window.__pipEntry !== "function") {
       window.__lastResult = { harnessError: "window.__pipEntry was not injected" };
+      window.__lastSettled = true;
       return;
     }
-    window.__lastResult = window.__pipEntry({});
+
+    window.__lastResult = undefined;
+    window.__lastSettled = false;
+
+    // CALLED SYNCHRONOUSLY, RESULT OBSERVED AFTERWARDS. The activation is spent
+    // by this call, so nothing below it can cost anything. pipEntry returns a
+    // plain object on the refusal paths and a PROMISE on the real-PiP path
+    // (it reports requestPictureInPicture()'s asynchronous rejection instead of
+    // swallowing it) — Promise.resolve settles both without caring which.
+    const result = window.__pipEntry({});
+    Promise.resolve(result).then((value) => {
+      window.__lastResult = value;
+      window.__lastSettled = true;
+    });
   });
 
   ready();

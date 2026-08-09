@@ -52,8 +52,11 @@ import { pipEntry, type PipEntryResult } from "../src/pip/entry";
 
 declare global {
   interface Window {
-    __pipEntry?: (options: { dryRun?: boolean }) => PipEntryResult;
+    /** Thenable on the real-PiP path, a plain object on the refusal paths. */
+    __pipEntry?: (options: { dryRun?: boolean }) => PipEntryResult | Promise<PipEntryResult>;
     __lastResult?: PipEntryResult & { harnessError?: string };
+    /** The fixture flips this once __lastResult has settled. See waitForResult. */
+    __lastSettled?: boolean;
     __pipWindowSize?: { width: number; height: number };
     /** Set only by the control test's declared spy. See installRejectionSpy. */
     __pipRejection?: string | null;
@@ -87,6 +90,19 @@ async function open(page: Page): Promise<void> {
   await page.waitForFunction(() => document.documentElement.dataset.fixtureReady === "true");
 }
 
+/**
+ * The click handler's result, once it has settled.
+ *
+ * pipEntry returns a plain object on the refusal paths but a PROMISE on the
+ * real-PiP path, so reading __lastResult straight after the click would race
+ * the microtask that fills it in — and would read `undefined` rather than fail,
+ * which is the kind of silent nothing this file exists to prevent.
+ */
+async function waitForResult(page: Page): Promise<PipEntryResult & { harnessError?: string }> {
+  await page.waitForFunction(() => window.__lastSettled === true);
+  return (await page.evaluate(() => window.__lastResult))!;
+}
+
 /** The conditions we measured under, carried into every failure message. */
 async function context(page: Page): Promise<string> {
   const state = await page.evaluate(() => document.documentElement.dataset.fixtureState ?? "[]");
@@ -100,7 +116,7 @@ test("enters PiP under a real gesture", async ({ page }) => {
   await page.click("#go");
   await page.waitForFunction(() => document.pictureInPictureElement !== null);
 
-  const result = await page.evaluate(() => window.__lastResult);
+  const result = await waitForResult(page);
   const ctx = await context(page);
 
   expect(result?.harnessError, ctx).toBeUndefined();
@@ -126,7 +142,7 @@ test("a second invocation exits and returns the video, still playing", async ({ 
   await page.click("#go");
   await page.waitForFunction(() => document.pictureInPictureElement === null);
 
-  const result = await page.evaluate(() => window.__lastResult);
+  const result = await waitForResult(page);
   const ctx = await context(page);
   expect(result?.outcome, ctx).toBe("PIP_EXITED");
 
@@ -174,10 +190,12 @@ test("THE CONTROL — no gesture means NotAllowedError", async ({ page }) => {
   // WORTHLESS. It is the only thing standing between "the click did the work"
   // and "the harness was handing out activation and we measured nothing".
 
-  // A DECLARED SPY, installed for this test only. pipEntry attaches its own
-  // .catch() to the returned promise and reports nothing about the rejection,
-  // so the rejection's name is unreachable from its return value. This wrapper
-  // records the name and hands back the very same promise, untouched.
+  // A DECLARED SPY, installed for this test only, as an INDEPENDENT CROSS-CHECK
+  // — not the primary source. pipEntry now reports the rejection itself, and
+  // the assertions below read it from pipEntry's own return value; this wrapper
+  // observes the raw promise straight from the browser so the two can be
+  // compared. It records the name and hands back the very same promise,
+  // untouched.
   await page.addInitScript(() => {
     window.__pipRejection = null;
     const real = HTMLVideoElement.prototype.requestPictureInPicture;
@@ -221,28 +239,38 @@ test("THE CONTROL — no gesture means NotAllowedError", async ({ page }) => {
       "  Until that is fixed this test proves nothing.\n"
   ).toEqual({ isActive: false, hasBeenActive: false });
 
+  // Promise.resolve + awaitPromise, because pipEntry is thenable on this path:
+  // JSON.stringify of the promise itself would be "{}" and every assertion
+  // below would then be comparing against undefined.
   const result: PipEntryResult = JSON.parse(
-    await noGestureEval<string>(cdp, "JSON.stringify(window.__pipEntry({}))")
+    await noGestureEval<string>(
+      cdp,
+      "Promise.resolve(window.__pipEntry({})).then(function (r) { return JSON.stringify(r); })"
+    )
   );
 
   const rejection = await noGestureEval<string | null>(cdp, "window.__pipRejection");
   const pipOpen = await noGestureEval<boolean>(cdp, "document.pictureInPictureElement !== null");
   const ctx = `\n  pipEntry result: ${JSON.stringify(result)}\n  rejection: ${rejection}\n`;
 
-  // The browser refused. This is the assertion the whole file rests on.
-  expect(rejection, ctx).toBe("NotAllowedError");
+  // THE BROWSER REFUSED, AND pipEntry SAID SO. Reported by the function itself,
+  // which is the whole point: background/action.ts turns exactly this
+  // errorName into the PIP_UNAVAILABLE toast, so a result that did not carry it
+  // would mean the user got silence.
+  //
+  // Getting here required fixing entry.ts. MEASURED: a gesture-less
+  // requestPictureInPicture() does not throw, it rejects asynchronously, so the
+  // try/catch never fired and the old code returned an optimistic PIP_OK with
+  // the rejection swallowed — which made both of decideOutcome's errorName
+  // branches dead code in production.
+  expect(result.outcome, ctx).toBe("THREW");
+  expect(result.errorName, ctx).toBe("NotAllowedError");
   expect(pipOpen, ctx).toBe(false);
 
-  // A DISAGREEMENT BETWEEN THIS SPEC AND src/pip/entry.ts, PINNED RATHER THAN
-  // HIDDEN. Task 19 specified outcome === "THREW" here, on the assumption that
-  // a gesture-less requestPictureInPicture() throws synchronously. MEASURED: it
-  // does not. Chrome returns a promise and rejects it asynchronously with
-  // NotAllowedError, so entry.ts's try/catch never fires and its optimistic
-  // "PIP_OK" is returned before the browser has decided anything. entry.ts is
-  // deliberately unmodified (its caller reports failures over its own channel),
-  // and this expectation records the real behaviour so that changing it becomes
-  // a decision somebody makes on purpose rather than a silent drift.
-  expect(result.outcome, ctx).toBe("PIP_OK");
+  // Cross-check from the other side of the boundary: the spy sees the raw
+  // promise rejection, independently of how pipEntry chose to report it. If
+  // these two ever disagree, pipEntry is inventing its own answer.
+  expect(rejection, ctx).toBe("NotAllowedError");
 });
 
 test("disablePictureInPicture is respected even with a real gesture", async ({ page }) => {
@@ -259,7 +287,7 @@ test("disablePictureInPicture is respected even with a real gesture", async ({ p
 
   await page.click("#go");
 
-  const result = await page.evaluate(() => window.__lastResult);
+  const result = await waitForResult(page);
   const ctx = await context(page);
 
   expect(result?.reason, ctx).toBe("pip-disabled-by-site");
@@ -283,7 +311,7 @@ test("pictureInPictureEnabled: false reports pip-unavailable", async ({ page }) 
   await open(page);
   await page.click("#go");
 
-  const result = await page.evaluate(() => window.__lastResult);
+  const result = await waitForResult(page);
   const ctx = await context(page);
 
   expect(result?.reason, ctx).toBe("pip-unavailable");
