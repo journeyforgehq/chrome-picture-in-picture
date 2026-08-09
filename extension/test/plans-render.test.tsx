@@ -51,6 +51,19 @@ describe("the real PLANS, rendered through UpgradePaywall", () => {
     // The headline price, the unit next to it, and the reassurance under it —
     // the three strings that make "$9.99, once, forever" legible as an offer.
     expect(screen.getByText("$9.99")).toBeInTheDocument();
+
+    // The price and its unit must not run together. Every assertion in this repo
+    // was green while the card actually read "$9.99once", because they all matched
+    // "$9.99" as a SUBSTRING. Caught by looking at the screenshot, not by a test —
+    // so assert the rendered adjacency, which is the thing a buyer sees.
+    // Walk to the enclosing price block rather than a fixed number of parents:
+    // antd renders <Text strong> as <span><strong>, so the price and its unit are
+    // two levels apart, and a hard-coded parentElement hop silently reads "$9.99"
+    // and passes whatever the unit does.
+    const priceEl = screen.getByText("$9.99");
+    const priceBlock = (priceEl.closest("div")?.textContent ?? "").replace(/\s+/g, " ");
+    expect(priceBlock).toContain("$9.99 once");
+    expect(priceBlock).not.toContain("$9.99once");
     expect(screen.getByText("once")).toBeInTheDocument();
     expect(screen.getByText("One-time payment")).toBeInTheDocument();
     expect(screen.getByText("Pay once, yours forever.")).toBeInTheDocument();
@@ -121,6 +134,19 @@ describe("the real PLANS, through the page that actually mounts them", () => {
       </ThemeProvider>
     );
     expect(screen.getByText("$9.99")).toBeInTheDocument();
+
+    // The price and its unit must not run together. Every assertion in this repo
+    // was green while the card actually read "$9.99once", because they all matched
+    // "$9.99" as a SUBSTRING. Caught by looking at the screenshot, not by a test —
+    // so assert the rendered adjacency, which is the thing a buyer sees.
+    // Walk to the enclosing price block rather than a fixed number of parents:
+    // antd renders <Text strong> as <span><strong>, so the price and its unit are
+    // two levels apart, and a hard-coded parentElement hop silently reads "$9.99"
+    // and passes whatever the unit does.
+    const priceEl = screen.getByText("$9.99");
+    const priceBlock = (priceEl.closest("div")?.textContent ?? "").replace(/\s+/g, " ");
+    expect(priceBlock).toContain("$9.99 once");
+    expect(priceBlock).not.toContain("$9.99once");
     expect(document.querySelectorAll('[data-testid^="plan-"]')).toHaveLength(1);
     expect((document.querySelector(".ant-modal") as HTMLElement).style.width).toBe(
       ONE_PLAN_MODAL_WIDTH

@@ -30,7 +30,10 @@ describe("PLANS (single source)", () => {
     expect(PLANS).toHaveLength(1);
     expect(PLANS[0].id).toBe("lifetime");
     expect(PLANS[0].price).toBe("$9.99");
-    expect(PLANS[0].unit).toBe("once");
+    // Leading space is deliberate — UpgradePaywall emits `{price}{unit}` with no
+    // separator. Correct for "/yr"; without it a word-unit renders "$9.99once".
+    // The rendered proof is in plans-render.test.tsx; this pins the data.
+    expect(PLANS[0].unit).toBe(" once");
   });
 
   it("highlights nothing — the POPULAR ribbon is meaningless at one plan", () => {

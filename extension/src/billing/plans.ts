@@ -32,7 +32,15 @@ export const PLANS: PaywallPlan[] = [
     id: "lifetime",
     label: "Lifetime",
     price: "$9.99",
-    unit: "once",
+    // Leading space is deliberate and load-bearing. ui-kit/UpgradePaywall emits
+    // `{price}{unit}` with no separator, which is correct for slash-units — a
+    // ladder plan renders "$29/yr" and a space there would be wrong. It is wrong
+    // for a WORD: without this, the card reads "$9.99once".
+    //
+    // Caught by looking at the rendered card, not by a test — every assertion
+    // was green because they matched "$9.99" as a substring. UpgradePaywall is
+    // CORE, so the separator belongs in this child's own pricing data.
+    unit: " once",
     priceNote: "One-time payment",
     description: "Pay once, yours forever.",
     features: ["Every Pro feature", "No renewals, ever", "All future updates included"],
