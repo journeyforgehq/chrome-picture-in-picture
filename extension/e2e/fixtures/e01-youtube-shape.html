@@ -1,0 +1,18 @@
+<!doctype html><meta charset="utf-8"><title>E01 — YouTube-shape</title>
+<style>#movie_player{position:relative;width:854px;height:480px}
+       .overlay{position:absolute;inset:0}</style><body>
+<div id="movie_player">
+  <div class="overlay"></div><div class="overlay"></div>
+</div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // STRUCTURAL TRAITS under test: a wrapper with sibling absolutely-positioned
+  // overlay divs, and — the important one — ADS REUSE THE SAME <video> ELEMENT,
+  // so there is exactly one video and ad-vs-content confusion cannot arise here.
+  // Deliberately NOT asserting on the class name `html5-main-video`: class names
+  // drift fastest, and asserting on them is how this suite rots.
+  const v = makeVideo({ label: "main", width: 854, height: 480, muted: false, duration: 600 });
+  v.classList.add("html5-main-video");
+  document.getElementById("movie_player").prepend(v);
+  ready();
+</script>

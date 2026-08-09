@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>E03 — Video.js-shape</title>
+<style>.video-js{position:relative;width:640px;height:360px}
+       .vjs-poster{position:absolute;inset:0;background:#222}</style><body>
+<div class="video-js"><div class="vjs-poster"></div></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // STRUCTURAL TRAIT: a POSTER ELEMENT sitting as a sibling of the video inside
+  // the player wrapper. The poster is a <div> with a background image, not an
+  // <img> and not a second <video>, so it must never become a candidate — but
+  // it is absolutely positioned over the video, which is the shape that breaks
+  // any future "is the video the topmost element at its centre" occlusion test.
+  // Nothing here depends on `.video-js` / `.vjs-poster` — those class names are
+  // present for realism only; the trait is "a sibling overlay next to the video".
+  const wrap = document.querySelector(".video-js");
+  const v = makeVideo({ label: "tech", width: 640, height: 360, muted: false, duration: 600 });
+  v.classList.add("vjs-tech");
+  wrap.prepend(v);
+  ready();
+</script>

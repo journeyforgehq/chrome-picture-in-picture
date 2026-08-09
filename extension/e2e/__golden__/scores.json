@@ -266,6 +266,52 @@
     "d02-disable-attr-late": [],
     "d03-permissions-policy": [],
     "d04-empty": [],
-    "d05-no-src": []
+    "d05-no-src": [],
+    "e01-youtube-shape": [
+      {
+        "label": "main",
+        "score": 2000
+      }
+    ],
+    "e02-twitch-shape": [
+      {
+        "label": "stream",
+        "score": 1991
+      },
+      {
+        "label": "ad-roll",
+        "score": 900
+      }
+    ],
+    "e03-videojs-shape": [
+      {
+        "label": "tech",
+        "score": 2000
+      }
+    ],
+    "e04-jwplayer-shape": [
+      {
+        "label": "jw",
+        "score": 2000
+      }
+    ],
+    "e05-plyr-webcomponent": [
+      {
+        "label": "custom-el",
+        "score": 2000
+      }
+    ],
+    "e06-vimeo-embed": [
+      {
+        "label": "embedded",
+        "score": 2000
+      }
+    ],
+    "e07-generic-embed-no-allow": [
+      {
+        "label": "embedded",
+        "score": 2000
+      }
+    ]
   }
 }

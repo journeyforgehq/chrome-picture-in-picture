@@ -1,0 +1,6 @@
+<!doctype html><meta charset="utf-8"><title>embedded player</title><body style="margin:0">
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  document.body.append(makeVideo({ label: "embedded", muted: false, duration: 600 }));
+  ready();
+</script>

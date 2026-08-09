@@ -1,0 +1,26 @@
+<!doctype html><meta charset="utf-8"><title>E05 — registered custom element, open shadow root</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // STRUCTURAL TRAIT: a REGISTERED CUSTOM ELEMENT whose open shadow root holds
+  // the video. Group A already covers a bare attachShadow() on a plain <div>;
+  // what is different here is that the boundary is created by the element's own
+  // upgrade lifecycle, so the shadow root only exists after customElements
+  // resolves the definition and connectedCallback runs. entry.ts's walk reads
+  // `.shadowRoot` off every element it meets, which is agnostic to how the root
+  // got there — this fixture is what keeps that true.
+  class PlyrPlayer extends HTMLElement {
+    connectedCallback() {
+      if (this.shadowRoot) return;
+      const root = this.attachShadow({ mode: "open" });
+      const style = document.createElement("style");
+      style.textContent = ":host{display:block;width:640px;height:360px}";
+      root.append(style);
+      root.append(makeVideo({ label: "custom-el", width: 640, height: 360, muted: false, duration: 600 }));
+    }
+  }
+  customElements.define("plyr-player", PlyrPlayer);
+  // Appended AFTER define(), so connectedCallback — and therefore makeVideo's
+  // readiness registration — runs synchronously here, before ready() below.
+  document.body.append(document.createElement("plyr-player"));
+  ready();
+</script>

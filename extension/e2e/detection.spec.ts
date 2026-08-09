@@ -1,9 +1,9 @@
-import { test, expect } from "@playwright/test";
+import { test, expect, type Frame } from "@playwright/test";
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { startServers } from "./serve";
-import { pipEntry } from "../src/pip/entry";
+import { pipEntry, type PipEntryResult } from "../src/pip/entry";
 
 /* ============================================================================
  * Detection fixtures — which <video> wins, on a real page, in a real browser.
@@ -49,6 +49,26 @@ interface DetectionCase {
    * rather than silently becoming "one row per fixture, except this one".
    */
   scrollRecheck?: { y: number; underSelector: string; winner: string };
+  /**
+   * The player lives in a cross-origin SUBFRAME. pipEntry on the top document
+   * finds nothing there, so for these cases the runner waits on the CHILD
+   * frame's readiness flag and evaluates pipEntry inside the child.
+   *
+   * Two runs, because one run cannot say both things:
+   *
+   *   1. AS INJECTED, with no content script to arbitrate, the subframe stands
+   *      down before it collects a single video. The runner asserts that shape
+   *      rather than assuming it — it is the frame-arbitration design working,
+   *      and it is WHY embedded players need site access.
+   *   2. WITH window.__pipCoord = { isWinner: true } — the flag a real install's
+   *      content script sets — the same frame scores its videos and picks one.
+   *      `winner` on these cases is that label.
+   *
+   * Run 2 is what feeds the golden. Run 1's vector is always [] (it returns
+   * before scoring), and recording that would make these two rows read exactly
+   * like "every video was filtered out", which is the opposite of what happened.
+   */
+  inFrame?: boolean;
 }
 
 /** Later tasks append to this array. */
@@ -113,6 +133,20 @@ export const CASES: DetectionCase[] = [
   { id: "d03-permissions-policy", winner: null, reason: "pip-unavailable" },
   { id: "d04-empty", winner: null, reason: "none-found" },
   { id: "d05-no-src", winner: null, reason: "not-ready" },
+
+  // --- Group E: the DOM SHAPES of the players that actually matter. ---------
+  { id: "e01-youtube-shape", winner: "main" },
+  { id: "e02-twitch-shape", winner: "stream" },
+  { id: "e03-videojs-shape", winner: "tech" },
+  { id: "e04-jwplayer-shape", winner: "jw" },
+  { id: "e05-plyr-webcomponent", winner: "custom-el" },
+  // The embed pair. `winner` is the label the SUBFRAME produces once elected —
+  // see `inFrame` above for why that needs saying. E07 is E06 minus allow=, and
+  // the two are expected to be identical: the Permissions Policy default
+  // allowlist for picture-in-picture is *, so the attribute buys nothing. If
+  // these rows ever diverge in the golden, that default changed under us.
+  { id: "e06-vimeo-embed", winner: "embedded", inFrame: true },
+  { id: "e07-generic-embed-no-allow", winner: "embedded", inFrame: true },
 ];
 
 const ORIGINS = { a: "http://localhost:3000", b: "http://127.0.0.1:3001" } as const;
@@ -251,12 +285,55 @@ for (const c of CASES) {
       () => document.documentElement.dataset.fixtureReady === "true"
     );
 
-    const result = await page.evaluate(pipEntry, { dryRun: true });
+    // For an inFrame case the measurable document is the CHILD's, not this one.
+    // window.load on the top document already awaited the iframe, so by the
+    // time the flag above is set the frame object exists; its own readiness
+    // flag is a separate wait because the child's videos load independently.
+    let target: Frame = page.mainFrame();
+    if (c.inFrame) {
+      const child = page.frames().find((f) => f !== page.mainFrame());
+      expect(child, `\n  ${c.id} is marked inFrame but the page has no subframe\n`).toBeTruthy();
+      target = child as Frame;
+      await target.waitForFunction(
+        () => document.documentElement.dataset.fixtureReady === "true"
+      );
+    }
+
+    const result = await target.evaluate(pipEntry, { dryRun: true });
+
+    // The run whose score vector is worth recording. For a top-frame case that
+    // is the run above. For a subframe it is the second, elected run below —
+    // the first returns before scoring anything.
+    let scoring = result;
+
+    if (c.inFrame) {
+      // Re-run in the SAME frame with the arbitration flag a real install's
+      // content script sets. Rebuilt from source text via new Function for the
+      // same reason the runtime budget below does it: `pipEntry` the module
+      // export does not exist inside the page, and this is exactly the shape
+      // chrome.scripting.executeScript ships.
+      scoring = (await target.evaluate(
+        ({ src }) => {
+          const fn = new Function("return (" + src + ")")() as (o: unknown) => unknown;
+          const w = window as unknown as Record<string, unknown>;
+          w.__pipCoord = { isWinner: true };
+          try {
+            return fn({ dryRun: true });
+          } finally {
+            delete w.__pipCoord;
+          }
+        },
+        { src: pipEntry.toString() }
+      )) as PipEntryResult;
+    }
 
     // Recorded BEFORE the assertions below: when a winner assertion fails, the
     // score vector is the evidence for WHY, and it must survive into the
     // golden diff rather than vanish with the throw.
-    collected[c.id] = result.candidates.map((k) => ({ label: k.label, score: Math.round(k.score) }));
+    collected[c.id] = scoring.candidates.map((k) => ({
+      label: k.label,
+      score: Math.round(k.score),
+    }));
 
     // The conditions under which we measured, carried INTO the failure
     // message so a red run says whether the fixture or the code under test was
@@ -264,12 +341,30 @@ for (const c of CASES) {
     // because attachments passed as `body` are never rendered by the `list`
     // reporter this suite runs under — a diagnostic nobody can see is not a
     // diagnostic.
-    const state = await page.evaluate(() => document.documentElement.dataset.fixtureState ?? "[]");
+    const state = await target.evaluate(
+      () => document.documentElement.dataset.fixtureState ?? "[]"
+    );
     const context =
-      `\n  fixture state: ${state}` + `\n  pipEntry result: ${JSON.stringify(result)}\n`;
+      `\n  fixture state: ${state}` +
+      `\n  pipEntry result: ${JSON.stringify(result)}` +
+      (c.inFrame ? `\n  pipEntry result (elected): ${JSON.stringify(scoring)}` : "") +
+      `\n`;
 
-    expect(result.winner?.label ?? null, context).toBe(c.winner);
-    if (c.reason) expect(result.reason, context).toBe(c.reason);
+    if (c.inFrame) {
+      // THE STAND-DOWN, ASSERTED RATHER THAN ASSUMED. A subframe with no
+      // __pipCoord is not the top frame, so entry.ts returns at the
+      // arbitration gate — before the capability check, before it collects a
+      // single video. winner and candidates are therefore empty here NOT
+      // because nothing was findable but because nothing was looked for.
+      expect(result.frame, context).toBe("SUBFRAME");
+      expect(result.acted, context).toBe(false);
+      expect(result.reason, context).toBe("not-winner");
+      expect(result.winner, context).toBeNull();
+      expect(result.candidates, context).toEqual([]);
+    }
+
+    expect(scoring.winner?.label ?? null, context).toBe(c.winner);
+    if (c.reason) expect(scoring.reason, context).toBe(c.reason);
 
     if (c.scrollRecheck) {
       const { y, underSelector, winner } = c.scrollRecheck;
