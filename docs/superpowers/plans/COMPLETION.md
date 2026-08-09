@@ -244,18 +244,25 @@ guards above still green. The mutation was reverted and the suite is green.
 
 Nothing below blocks the branch; all of it blocks a Chrome Web Store submission.
 
-1. **The icon is placeholder art** — a flat `#1677ff` square at all three sizes.
-   Manual checklist rows 2–3 will fail on legibility-of-meaning until real
-   artwork lands.
+1. ~~**The icon is placeholder art**~~ — **CLOSED 2026-08-09.** The real
+   artwork from the design package (`05-graphics/icons`) now ships at 16/48/128.
+   The root cause is worth keeping: `test/icons.test.ts` ran `gen-icons.mjs` in
+   `beforeAll`, so every `npm test` silently overwrote the shipped icons with
+   the factory placeholder — and the test asserted only "a valid PNG of the
+   right size", which a flat square satisfies perfectly. The test now asserts
+   structure **and** that the file is too large to be a flat square.
 2. **`__ORG__` placeholder** in the options footer's "Read the source" link.
    `test/options/options.test.tsx > options submission gates` is skipped and
    waiting; un-skip it once the real repo exists.
 3. **`__EXT_ID__` placeholder** in `welcome-page/src/content.ts:155`
    (`pro.restoreHref: "chrome-extension://__EXT_ID__/options.html"`). It must be
    substituted with the real extension id once the store listing exists.
-   *Note:* this token is **no longer caught by preflight** — that guard matched
-   the old `REPLACE_WITH_EXTENSION_ID` spelling, and the welcome-page rewrite
-   changed the spelling. Nothing red-flags it today.
+   *Note:* this token was **not caught by preflight** — that guard matched only
+   `REPLACE_WITH_*`, and the welcome-page rewrite introduced the
+   `__DOUBLE_UNDERSCORE__` spelling. **Fixed 2026-08-09:** the pattern now
+   matches both, and `__ORG__`, `__EXT_ID__` and `__DOMAIN__` are all caught.
+   A guard that silently stops matching is worse than no guard — the green run
+   reads as "no placeholders shipped" rather than "not looking".
 4. ~~The welcome page still describes the template product~~ — **CLOSED.**
    Parity row 94 / finding 4 is stale: commit `9a43d02` rewrote the copy.
    Verified in this pass — `appName: "Picture in Picture"`, and the
