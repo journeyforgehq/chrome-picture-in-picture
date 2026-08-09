@@ -6,7 +6,26 @@ import { getDeviceId, createEntitlement, checkoutUrl, config } from "../billing"
 import { PLANS } from "../billing/plans";
 import type { RestoreResult } from "../billing";
 import { chromeSyncLocalStores, chromeLocalStore } from "../billing/chrome-storage";
+import { getSettings, setSettings, DEFAULT_SETTINGS, type PipSettings } from "../pip/state";
 import type { Tier, Plan, PaidStatus } from "../contract";
+
+/** The optional grant that "Support embedded players" is a front-end for.
+ *  Declared in manifest.json under optional_host_permissions — NOT permissions. */
+const ALL_URLS: chrome.permissions.Permissions = { origins: ["<all_urls>"] };
+
+/** Chrome's own shortcut editor. Only reachable via chrome.tabs.create — see
+ *  handleOpenShortcuts. */
+const SHORTCUTS_URL = "chrome://extensions/shortcuts";
+
+/** Public repository, linked from the footer. Deliberately not a config token:
+ *  it is a property of this codebase, not of the deployment environment, and
+ *  billing/config.ts is CORE-vendored (edits there are recorded drift).
+ *
+ *  __ORG__ is the project's placeholder convention, and it is deliberately
+ *  UGLY: a plausible-looking invented org would survive review by looking
+ *  finished and then 404 for real users. The pre-submission checklist greps for
+ *  this token; test/options/options.test.tsx carries the matching skipped gate. */
+const SOURCE_URL = "https://github.com/__ORG__/picture-in-picture";
 
 export function Options() {
   const [tier, setTier] = useState<Tier>("free");
@@ -17,11 +36,17 @@ export function Options() {
   const [paywallOpen, setPaywallOpen] = useState(false);
   const [deviceId, setDeviceId] = useState<string>("");
   const [entitlement, setEntitlement] = useState<ReturnType<typeof createEntitlement> | null>(null);
+  const [settings, setSettingsState] = useState<PipSettings>(DEFAULT_SETTINGS);
+  const [siteAccessDenied, setSiteAccessDenied] = useState(false);
 
   useEffect(() => {
     let cancelled = false;
 
     async function init() {
+      const stored = await getSettings();
+      if (cancelled) return;
+      setSettingsState(stored);
+
       const id = await getDeviceId(chromeSyncLocalStores());
       if (cancelled) return;
       setDeviceId(id);
@@ -35,6 +60,8 @@ export function Options() {
       });
       setEntitlement(client);
 
+      // Seed from the last-known cached record so a returning Pro user doesn't
+      // flash "Free"/locked before the network resolves.
       const cached = await client.getCached();
       if (cancelled) return;
       if (cached) {
@@ -58,6 +85,49 @@ export function Options() {
     };
   }, []);
 
+  /* ==========================================================================
+   * THIS FUNCTION MUST STAY SYNCHRONOUS DOWN TO THE PERMISSIONS CALL.
+   *
+   * chrome.permissions.request() rejects with
+   *   "This function must be called during a user gesture"
+   * unless it is reached from the click's own synchronous call stack. One
+   * `await` anywhere above it — reading settings first, "just" checking
+   * permissions.contains() — is enough to break it, and the failure surfaces
+   * only in a real browser: Chrome's confirmation bubble is out-of-process and
+   * unreachable by Playwright, so the promise simply never settles under
+   * automation and this path can never be end-to-end tested. It is covered by
+   * a synchronous-dispatch unit test in test/options/options.test.tsx and by
+   * manual QA — not by e2e.
+   * ========================================================================*/
+  function handleSettingChange(key: keyof PipSettings, value: boolean) {
+    if (key === "embeddedPlayers") {
+      if (value) {
+        chrome.permissions.request(ALL_URLS).then((granted) => {
+          if (!granted) {
+            // Not an error state: page videos still work. Say so, leave it off.
+            setSiteAccessDenied(true);
+            return;
+          }
+          setSiteAccessDenied(false);
+          void persist({ embeddedPlayers: true });
+        });
+        return;
+      }
+      setSiteAccessDenied(false);
+      chrome.permissions.remove(ALL_URLS).then(() => {
+        void persist({ embeddedPlayers: false });
+      });
+      return;
+    }
+
+    void persist({ [key]: value } as Partial<PipSettings>);
+  }
+
+  async function persist(patch: Partial<PipSettings>) {
+    const next = await setSettings(patch);
+    setSettingsState(next);
+  }
+
   async function handleRestore(email: string) {
     if (!entitlement) return;
     setRestoring(true);
@@ -67,6 +137,20 @@ export function Options() {
       setTier(result.tier);
     } finally {
       setRestoring(false);
+    }
+  }
+
+  /* Chrome blocks renderer-initiated navigation to chrome:// URLs, and an
+   * extension page is NOT exempt: <a href="chrome://extensions/shortcuts">
+   * silently does nothing when clicked. chrome.tabs.create() is the supported
+   * route and needs no "tabs" permission — that one gates tab querying and
+   * reading tab URLs, not creating a tab. Mirrors handleCheckout's fallback so
+   * the gallery and any non-extension host degrade instead of throwing. */
+  function handleOpenShortcuts() {
+    if (typeof chrome !== "undefined" && chrome.tabs?.create) {
+      chrome.tabs.create({ url: SHORTCUTS_URL });
+    } else {
+      window.open(SHORTCUTS_URL, "_blank");
     }
   }
 
@@ -85,6 +169,9 @@ export function Options() {
         tier={tier}
         plan={plan}
         status={status}
+        settings={settings}
+        onSettingChange={handleSettingChange}
+        onOpenShortcuts={handleOpenShortcuts}
         restoreResult={restoreResult}
         restoring={restoring}
         onRestore={handleRestore}
@@ -93,6 +180,8 @@ export function Options() {
         onClosePaywall={() => setPaywallOpen(false)}
         onCheckout={handleCheckout}
         plans={PLANS}
+        sourceUrl={SOURCE_URL}
+        siteAccessDenied={siteAccessDenied}
       />
     </ThemeProvider>
   );

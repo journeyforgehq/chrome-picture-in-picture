@@ -1,6 +1,6 @@
 import React from "react";
 import { describe, it, expect, vi, beforeEach } from "vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 
@@ -34,13 +34,43 @@ vi.mock("../../src/billing/chrome-storage", () => ({
 }));
 
 import { Options } from "../../src/options/options";
+import { DEFAULT_SETTINGS } from "../../src/pip/state";
+
+/** chrome.storage.local backed by a Map, so getSettings/setSettings round-trip
+ * for real instead of being mocked out of the wiring under test. */
+function storageStub(seed: Record<string, unknown> = {}) {
+  const store = new Map<string, unknown>(Object.entries(seed));
+  return {
+    map: store,
+    area: {
+      get: vi.fn(async (k: string) => (store.has(k) ? { [k]: store.get(k) } : {})),
+      set: vi.fn(async (o: Record<string, unknown>) => {
+        for (const k of Object.keys(o)) store.set(k, o[k]);
+      }),
+      remove: vi.fn(async (k: string) => {
+        store.delete(k);
+      }),
+    },
+  };
+}
+
+let storage: ReturnType<typeof storageStub>;
+let permissionsRequest: ReturnType<typeof vi.fn>;
+let permissionsRemove: ReturnType<typeof vi.fn>;
 
 describe("Options container", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     refreshMock.mockResolvedValue("free");
     getCachedMock.mockResolvedValue(null);
-    vi.stubGlobal("chrome", { tabs: { create: vi.fn() } });
+    storage = storageStub();
+    permissionsRequest = vi.fn().mockResolvedValue(true);
+    permissionsRemove = vi.fn().mockResolvedValue(true);
+    vi.stubGlobal("chrome", {
+      tabs: { create: vi.fn() },
+      storage: { local: storage.area },
+      permissions: { request: permissionsRequest, remove: permissionsRemove },
+    });
   });
 
   it("passes cached plan/status through to OptionsView (PlanBadge shows the plan, not 'No plan')", async () => {
@@ -80,5 +110,134 @@ describe("Options container", () => {
     await user.click(screen.getByRole("button", { name: /restore purchase/i }));
 
     expect(await screen.findByRole("alert")).toHaveTextContent(/purchase restored/i);
+  });
+
+  // Ported from test/popup/popup.test.tsx. options.tsx has carried the
+  // byte-equivalent cached seed all along with no test of its own; the popup —
+  // and therefore that test — is deleted two tasks from now, so the behaviour
+  // needs its coverage HERE before that happens.
+  it("seeds the cached Pro tier immediately (no Free flash) before refresh resolves", async () => {
+    getCachedMock.mockResolvedValue({
+      tier: "pro",
+      plan: "annual",
+      status: "active",
+      checkedAt: Date.now(),
+    });
+    refreshMock.mockReturnValue(new Promise(() => {})); // network never resolves
+    render(<Options />);
+    expect(await screen.findByTestId("tier-badge")).toHaveTextContent("Pro");
+    expect(screen.queryByText("Free")).not.toBeInTheDocument();
+  });
+});
+
+describe("Options container — settings wiring", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    refreshMock.mockResolvedValue("free");
+    getCachedMock.mockResolvedValue(null);
+    storage = storageStub();
+    permissionsRequest = vi.fn().mockResolvedValue(true);
+    permissionsRemove = vi.fn().mockResolvedValue(true);
+    vi.stubGlobal("chrome", {
+      tabs: { create: vi.fn() },
+      storage: { local: storage.area },
+      permissions: { request: permissionsRequest, remove: permissionsRemove },
+    });
+  });
+
+  const embeddedSwitch = () => screen.getByRole("switch", { name: /support embedded players/i });
+  const toastSwitch = () => screen.getByRole("switch", { name: /show status messages/i });
+
+  it("hydrates the switches from stored settings", async () => {
+    storage.map.set("settings", { embeddedPlayers: true, toastEnabled: false });
+    render(<Options />);
+    await waitFor(() => expect(embeddedSwitch()).toBeChecked());
+    expect(toastSwitch()).not.toBeChecked();
+  });
+
+  it("falls back to DEFAULT_SETTINGS when nothing is stored", async () => {
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    expect(embeddedSwitch().getAttribute("aria-checked")).toBe(String(DEFAULT_SETTINGS.embeddedPlayers));
+    expect(toastSwitch().getAttribute("aria-checked")).toBe(String(DEFAULT_SETTINGS.toastEnabled));
+  });
+
+  it("persists the toast toggle through setSettings", async () => {
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    fireEvent.click(toastSwitch());
+    await waitFor(() => expect(storage.map.get("settings")).toMatchObject({ toastEnabled: false }));
+    await waitFor(() => expect(toastSwitch()).not.toBeChecked());
+  });
+
+  it("requests <all_urls> SYNCHRONOUSLY from the click — no await may precede it", async () => {
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    // fireEvent.click returns before any microtask runs. If the handler awaited
+    // ANYTHING first, chrome.permissions.request would reject in the real
+    // browser with "This function must be called during a user gesture" — and
+    // this assertion is what catches that regression.
+    fireEvent.click(embeddedSwitch());
+    expect(permissionsRequest).toHaveBeenCalledWith({ origins: ["<all_urls>"] });
+  });
+
+  it("persists embeddedPlayers only after the grant is given", async () => {
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    fireEvent.click(embeddedSwitch());
+    await waitFor(() => expect(storage.map.get("settings")).toMatchObject({ embeddedPlayers: true }));
+    await waitFor(() => expect(embeddedSwitch()).toBeChecked());
+    expect(screen.queryByTestId("site-access-denied")).not.toBeInTheDocument();
+  });
+
+  it("a declined grant leaves the switch off, persists nothing, and says so calmly", async () => {
+    permissionsRequest.mockResolvedValue(false);
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    fireEvent.click(embeddedSwitch());
+    expect(await screen.findByTestId("site-access-denied")).toHaveTextContent(/still/i);
+    expect(embeddedSwitch()).not.toBeChecked();
+    expect(storage.map.get("settings")).toBeUndefined();
+  });
+
+  it("opens Chrome's shortcut editor through chrome.tabs.create, not a chrome:// link", async () => {
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole("button", { name: /change shortcut/i }));
+    expect(chrome.tabs.create).toHaveBeenCalledWith({ url: "chrome://extensions/shortcuts" });
+  });
+
+  it("turning it off removes the optional host permission", async () => {
+    storage.map.set("settings", { embeddedPlayers: true, toastEnabled: true });
+    render(<Options />);
+    await waitFor(() => expect(embeddedSwitch()).toBeChecked());
+    fireEvent.click(embeddedSwitch());
+    expect(permissionsRemove).toHaveBeenCalledWith({ origins: ["<all_urls>"] });
+    await waitFor(() => expect(storage.map.get("settings")).toMatchObject({ embeddedPlayers: false }));
+  });
+});
+
+/* ============================================================================
+ * SUBMISSION GATE — deliberately it.skip, not deleted and not passing.
+ * ============================================================================
+ * The options footer links to https://github.com/__ORG__/picture-in-picture.
+ * `__ORG__` is a placeholder chosen to be obviously unfinished: an invented but
+ * plausible org would survive review by LOOKING finished and then 404 for every
+ * real user who clicked it.
+ *
+ * This is skipped rather than absent so it shows up in `npm test` output as a
+ * standing pending item — a silently missing test is how a placeholder ships.
+ * UN-SKIP IT (and it must pass) as part of the Chrome Web Store pre-submission
+ * checklist, once the real org/repo exists. It reads the BUILT bundle, so it
+ * also catches the token being reintroduced anywhere else in the options entry.
+ * ==========================================================================*/
+describe("options submission gates", () => {
+  it.skip("ships no unresolved __ORG__ placeholder in the built options bundle", async () => {
+    const { readFileSync } = await import("node:fs");
+    const path = await import("node:path");
+    const { fileURLToPath } = await import("node:url");
+    const here = path.dirname(fileURLToPath(import.meta.url));
+    const bundle = readFileSync(path.resolve(here, "../../dist/options.js"), "utf8");
+    expect(bundle).not.toContain("__ORG__");
   });
 });

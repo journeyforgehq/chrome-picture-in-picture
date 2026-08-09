@@ -16,6 +16,8 @@ import {
   type PaywallPlan,
 } from "../src/ui-kit";
 import type { RestoreResult } from "../src/billing/entitlement";
+import type { PipSettings } from "../src/pip/state";
+import type { Plan, PaidStatus } from "../src/contract";
 import { PopupView } from "../src/popup/PopupView";
 import { OptionsView } from "../src/options/OptionsView";
 import { PIP_ERROR_CODES, messageFor, severityFor } from "../src/pip/errors";
@@ -67,12 +69,33 @@ function PopupViewCard({ tier }: { tier: "free" | "pro" }) {
   );
 }
 
-function OptionsViewCard({ restoreResult }: { restoreResult: RestoreResult | undefined }) {
+/** Wraps an OptionsView with its own local paywall + settings state, so each
+ * card is independently interactive (clicking a Switch really flips it, which
+ * is what the visual spec's checked-colour assertion needs to be meaningful). */
+function OptionsViewCard({
+  tier = "free",
+  status,
+  plan,
+  restoreResult,
+  settings: initialSettings = { embeddedPlayers: false, toastEnabled: true },
+}: {
+  tier?: "free" | "pro";
+  status?: PaidStatus;
+  plan?: Plan;
+  restoreResult?: RestoreResult;
+  settings?: PipSettings;
+}) {
   const [paywallOpen, setPaywallOpen] = useState(false);
+  const [settings, setSettings] = useState<PipSettings>(initialSettings);
   return (
-    <div style={{ border: "1px solid #eee", display: "inline-block" }}>
+    <div style={{ border: "1px solid #eee", maxWidth: 560 }}>
       <OptionsView
-        tier="free"
+        tier={tier}
+        plan={plan}
+        status={status}
+        settings={settings}
+        onSettingChange={(key, value) => setSettings((s) => ({ ...s, [key]: value }))}
+        onOpenShortcuts={() => {}}
         restoreResult={restoreResult}
         restoring={false}
         onRestore={() => {}}
@@ -81,6 +104,7 @@ function OptionsViewCard({ restoreResult }: { restoreResult: RestoreResult | und
         onClosePaywall={() => setPaywallOpen(false)}
         onCheckout={() => {}}
         plans={PLANS}
+        sourceUrl="https://github.com/picture-in-picture-ext/picture-in-picture"
       />
     </div>
   );
@@ -188,6 +212,16 @@ function Gallery() {
         <Divider orientation="left">OptionsView — free</Divider>
         <div data-testid="optionsview-free">
           <OptionsViewCard restoreResult={undefined} />
+        </div>
+
+        <Divider orientation="left">OptionsView — pro</Divider>
+        <div data-testid="optionsview-pro">
+          <OptionsViewCard tier="pro" plan="lifetime" status="active" />
+        </div>
+
+        <Divider orientation="left">OptionsView — embedded players on</Divider>
+        <div data-testid="optionsview-embedded-on">
+          <OptionsViewCard settings={{ embeddedPlayers: true, toastEnabled: true }} />
         </div>
 
         <Divider orientation="left">OptionsView — restore 404</Divider>

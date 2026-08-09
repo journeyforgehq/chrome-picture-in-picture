@@ -1,12 +1,14 @@
 /* ============================================================================
- * pip state — storage accessors. THIS FILE RUNS ONLY IN THE SERVICE WORKER.
+ * pip state — storage accessors. TRUSTED EXTENSION CONTEXTS ONLY.
  * ============================================================================
  *
  * Unlike entry.ts and toast.ts, this module is NEVER injected into a page via
  * chrome.scripting.executeScript / Function.prototype.toString(). It is a
- * normal module imported by the service worker, so normal imports and module
- * scope are fine here — the "no outside identifiers" constraint on those two
- * files does not apply to this one.
+ * normal module imported by the service worker and by the options page, so
+ * normal imports and module scope are fine here — the "no outside identifiers"
+ * constraint on those two files does not apply to this one. It must NOT be
+ * imported by the content script: getActivePip/setActivePip touch
+ * storage.session, which is closed to content scripts (see note 2 below).
  *
  * Two measured facts shape what follows:
  *
