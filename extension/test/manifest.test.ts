@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { readFileSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -61,6 +61,40 @@ describe("manifest permission allowlist (R-04)", () => {
       48: "icons/icon-48.png",
       128: "icons/icon-128.png",
     });
+  });
+
+  /* --------------------------------------------------------------------------
+   * `action.default_icon` — the TOOLBAR button's artwork.
+   *
+   * Narrow on purpose. The whole-`action` `toEqual` was dropped when
+   * default_popup was removed (a recorded, conscious trade — see "manifest
+   * identity" below) and is deliberately NOT restored here: re-pinning the whole
+   * object just breaks again the next time the shape moves. What was left
+   * unguarded by that trade is this one key. `icons` above is the *store/
+   * extensions-page* icon; delete `default_icon` and Chrome falls back to a grey
+   * puzzle piece on the toolbar — which is the entire UI of this product — while
+   * every other assertion in this file stays green.
+   *
+   * The paths are resolved on disk, not merely compared as strings, because this
+   * repo has already shipped an icon defect that a string check could not see
+   * (COMPLETION §5: a flat blue placeholder square passed `test/icons.test.ts`).
+   * A manifest that points at a file that isn't there is the other half of that.
+   * ------------------------------------------------------------------------*/
+  it("carries the 16/48/128 default_icon triple on the toolbar action", () => {
+    expect(manifest.action.default_icon).toEqual({
+      16: "icons/icon-16.png",
+      48: "icons/icon-48.png",
+      128: "icons/icon-128.png",
+    });
+  });
+
+  it("points default_icon at files that exist on disk", () => {
+    const paths = Object.values(manifest.action.default_icon as Record<string, string>);
+    expect(paths).toHaveLength(3);
+    for (const rel of paths) {
+      const file = path.resolve(__dirname, "../src/static", rel);
+      expect(existsSync(file), `${rel} is declared in the manifest but missing`).toBe(true);
+    }
   });
 });
 

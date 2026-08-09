@@ -10,3 +10,5 @@ e2e/__screens__/
 .env.local
 extension.zip
 .tmp-injected-bundle/
+.tmp-zip-dist/
+.tmp-zip-dist.zip

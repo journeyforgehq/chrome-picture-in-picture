@@ -8,7 +8,7 @@
 // rotting in the meantime (decisions log, recorded gap 1).
 import React, { useState, useRef, useEffect } from "react";
 import { createRoot } from "react-dom/client";
-import { Typography, Space, Divider } from "antd";
+import { Typography, Space, Divider, Modal } from "antd";
 import {
   ThemeProvider,
   TierBadge,
@@ -23,11 +23,24 @@ import type { RestoreResult } from "../src/billing/entitlement";
 import type { PipSettings } from "../src/pip/state";
 import type { Plan, PaidStatus } from "../src/contract";
 import { OptionsView } from "../src/options/OptionsView";
+// The SHIPPED plan array, not a fixture. See REAL_PLANS' own section below.
+import { PLANS as REAL_PLANS } from "../src/billing/plans";
 import { PIP_ERROR_CODES, messageFor, severityFor } from "../src/pip/errors";
 import { showToast } from "../src/pip/toast";
 
 const { Title } = Typography;
 
+/**
+ * A FIXTURE, on purpose — and not the array this extension ships.
+ *
+ * v1 sells one plan (`src/billing/plans.ts`, $9.99 lifetime), which takes
+ * UpgradePaywall's one-plan branch (span 24, width 380). This two-plan fixture
+ * keeps the MULTI-plan layout (span 12, width 560) and the POPULAR-ribbon path
+ * renderable for the paid-tier plan, which re-adds a subscription. Deleting it
+ * would leave those branches with no rendering anywhere.
+ *
+ * The real array has its own card further down — see REAL_PLANS.
+ */
 const PLANS: PaywallPlan[] = [
   {
     id: "annual",
@@ -118,6 +131,12 @@ function ToastCard({ code }: { code: (typeof PIP_ERROR_CODES)[number] }) {
 
 function Gallery() {
   const [paywallOpen, setPaywallOpen] = useState(true); // OPEN by default so the modal is visible on load
+  // Both of these start CLOSED. Only one modal may be open on load: the visual
+  // spec closes that one and waits for `.ant-modal-mask` to be hidden before it
+  // asserts anything (a mask over the page produced a screenshot with no content
+  // in it once already — see the spec's header, trap 3).
+  const [realPaywallOpen, setRealPaywallOpen] = useState(false);
+  const [controlModalOpen, setControlModalOpen] = useState(false);
 
   return (
     <ThemeProvider accent="#1677ff">
@@ -209,6 +228,55 @@ function Gallery() {
         <div data-testid="optionsview-restore-404">
           <OptionsViewCard restoreResult={RESTORE_STATES["404"]} />
         </div>
+
+        {/* ------------------------------------------------------------------
+         * THE PAYWALL THIS EXTENSION ACTUALLY SHIPS.
+         *
+         * Every other paywall mount on this page — and in every unit test —
+         * uses the two-plan fixture above. This one imports `PLANS` from
+         * src/billing/plans.ts, so it is the $9.99 lifetime card a real user
+         * sees, in the one-plan layout branch (span 24, width 380) that the
+         * fixture can never exercise. Props are exactly OptionsView's: no
+         * title/subtitle override, so the heading is the shipped default.
+         *
+         * Closed by default on purpose — see the state comment above.
+         * ----------------------------------------------------------------*/}
+        <Divider orientation="left">UpgradePaywall — real PLANS</Divider>
+        <button data-testid="open-real-paywall" onClick={() => setRealPaywallOpen(true)}>
+          Open real paywall
+        </button>
+        <UpgradePaywall
+          open={realPaywallOpen}
+          plans={REAL_PLANS}
+          onCheckout={() => {}}
+          onClose={() => setRealPaywallOpen(false)}
+        />
+
+        {/* ------------------------------------------------------------------
+         * CONTROL for the focusTriggerAfterClose assertion. Not a ui-kit
+         * component — a bare antd Modal with antd's DEFAULT focus handling.
+         *
+         * UpgradePaywall sets `focusTriggerAfterClose={false}` deliberately (a
+         * gate that opens the paywall on focus would re-open it the moment the
+         * user closed it). Asserting "focus does NOT return to the trigger"
+         * passes for free if antd's restore is not working in the harness at
+         * all — which is exactly what happens under happy-dom, where the leave
+         * motion never completes and the restore callback never runs. This
+         * control proves the restore IS live in the browser the spec runs in,
+         * so the paywall's non-restore means something.
+         * ----------------------------------------------------------------*/}
+        <Divider orientation="left">Focus-restore control</Divider>
+        <button data-testid="open-control-modal" onClick={() => setControlModalOpen(true)}>
+          Open control modal
+        </button>
+        <Modal
+          open={controlModalOpen}
+          onCancel={() => setControlModalOpen(false)}
+          footer={null}
+          title="Focus-restore control"
+        >
+          Closing this restores focus to its trigger. The paywall must not.
+        </Modal>
       </div>
     </ThemeProvider>
   );
