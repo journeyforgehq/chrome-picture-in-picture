@@ -39,11 +39,25 @@
 import { describe, it, expect, beforeAll, beforeEach } from "vitest";
 import { createContext, runInContext } from "node:vm";
 import { existsSync, readFileSync } from "node:fs";
+import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const BUNDLE = path.resolve(__dirname, "../dist/background.js");
+// ⚠️ THIS TEST OWNS ITS BUNDLE. It must NOT read the shared dist/.
+//
+// Measured: test/webpack-config.test.ts, test/scripts.test.ts and
+// test/separation.test.ts all rebuild dist/, and some of them build in DEV mode.
+// Vitest runs test files concurrently, so whether this file saw a production or
+// a development bundle depended purely on scheduling — it passed in isolation
+// and failed in a full run, with the captured text coming back as unminified
+// `function pipEntry(options = {})`.
+//
+// A test that flips on file ordering is worse than no test: it trains everyone
+// to re-run until green. So we build a production bundle to a private directory
+// that nothing else writes, and assert against that.
+const OUT_DIR = path.resolve(__dirname, "../.tmp-injected-bundle");
+const BUNDLE = path.resolve(OUT_DIR, "background.js");
 
 interface Injection {
   func: (...args: unknown[]) => unknown;
@@ -142,13 +156,35 @@ function rebuild(fn: (...args: unknown[]) => unknown): (...args: unknown[]) => u
 let injections: Injection[] = [];
 
 beforeAll(async () => {
-  // A stale or absent dist/ would make this whole file assert nothing useful.
+  // Build our own production bundle. `bail: true` in the prod config means a
+  // compile error surfaces here rather than as a confusing capture failure.
+  const require_ = createRequire(import.meta.url);
+  const webpack = require_("webpack");
+  const prodConfig = require_("../webpack/webpack.prod.cjs");
+
+  const stats = await new Promise<any>((resolve, reject) => {
+    webpack(
+      { ...prodConfig, output: { ...prodConfig.output, path: OUT_DIR, clean: true } },
+      (err: Error | null, s: any) => (err ? reject(err) : resolve(s))
+    );
+  });
+  if (stats.hasErrors()) {
+    throw new Error("webpack failed:\n" + stats.toString({ all: false, errors: true }));
+  }
+
+  expect(existsSync(BUNDLE), `expected a production bundle at ${BUNDLE}`).toBe(true);
+
+  // Guard against the exact confusion that produced this comment: if the bundle
+  // is not minified, we are reading the wrong artifact and every assertion below
+  // would be testing dev output while claiming to test what ships.
+  const text = readFileSync(BUNDLE, "utf8");
   expect(
-    existsSync(BUNDLE),
-    "dist/background.js is missing — run `npm run build` before this test"
-  ).toBe(true);
+    text.includes("function pipEntry"),
+    "bundle is UNMINIFIED — this is a dev build, not what ships"
+  ).toBe(false);
+
   injections = await captureInjections();
-}, 20_000);
+}, 120_000);
 
 beforeEach(() => {
   document.body.innerHTML = "";
