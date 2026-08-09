@@ -7,6 +7,7 @@
     "build": "gatsby build",
     "serve": "gatsby serve -p 9000",
     "typecheck": "tsc --noEmit",
+    "test": "node --test test/*.test.mjs",
     "deploy": "gatsby build && npx wrangler pages deploy public --project-name picture-in-picture-web"
   },
   "dependencies": {
