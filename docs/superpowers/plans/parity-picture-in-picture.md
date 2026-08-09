@@ -25,7 +25,7 @@ Every command below was run on 2026-08-09 from
 
 | Handle | Command | Result |
 |---|---|---|
-| **C1** | `cd extension && npm test -- --reporter=verbose` | `Test Files  41 passed (41)` / `Tests  274 passed \| 1 skipped (275)` |
+| **C1** | `cd extension && npm test -- --reporter=verbose` | `Test Files  41 passed (41)` / `Tests  279 passed \| 1 skipped (280)` |
 | **C2** | `cd extension && npx playwright test` | `4 skipped` / `9 passed (23.0s)` |
 | **C3** | `cd extension && npm run e2e:fixtures` | `45 passed (6.5s)` |
 | **C4** | `cd extension && npm run e2e:visual` | `4 passed (11.3s)` |
@@ -73,7 +73,7 @@ no command in this repo touches it; see §2.
 |---|---|---|---|---|
 | 1 | Tier badge (Free/Pro) on the options page | C1, C2 | `✓ test/options/OptionsView.test.tsx > OptionsView — your plan row > renders the TierBadge for free` · `✓ … renders the TierBadge for pro` · `✓ 1 billing.spec.ts:29:1 › checkout webhook grants pro; cancel webhook re-locks` (asserts `[data-testid="tier-badge"]` = Free → Pro → Free) | ✅ |
 | 2 | Paywall trigger via `LockedFeature`'s "Unlock" | C1 | `✓ test/ui-kit/LockedFeature.test.tsx > LockedFeature > calls onUnlock when the unlock affordance is clicked` — component only; no production mount exists (DEFERRED to plan 2) | ⚠️ |
-| 3 | Checkout hand-off (`checkoutUrl` → `chrome.tabs.create`, `window.open` fallback), incl. `client_reference_id` | — | **No options-side test exists.** The `client_reference_id=device-abc-123` assertion still lives only in `test/popup/popup.test.tsx`. See §2, finding 1 — this is the highest-value gap in the document. | ❌ |
+| 3 | Checkout hand-off (`checkoutUrl` → `chrome.tabs.create`, `window.open` fallback), incl. `client_reference_id` | C1 | `✓ test/options/options.test.tsx > Options container > opens the lifetime checkout URL, with the device id as client_reference_id` · `✓ … falls back to window.open when chrome.tabs is unavailable`. **Ported from the popup in this pass** (the popup's copy stays until the popup goes). Both assert the whole URL — `https://buy.stripe.com/test-lifetime?client_reference_id=device-abc-123` — not merely that a tab opened. | ✅ |
 | 4 | `UpgradePaywall` mounted with the shared `PLANS` array | C1, C7 | `✓ test/options/OptionsView.test.tsx > OptionsView — your plan row > renders UpgradePaywall as open when paywallOpen is true` — but with a local fixture array. That `options.tsx` passes the *shared* `PLANS` is compile-checked only (C7 exit 0). | ⚠️ |
 | 5 | `PaymentNudge` (`past_due` alert + "Update payment method") | C1, C2 | `✓ test/options/OptionsView.test.tsx > … renders the PaymentNudge only when past_due` · `✓ … renders no PaymentNudge when active` · `✓ 3 dunning-refund.spec.ts:26:1 › past_due shows the nudge but keeps Pro; refund re-locks` (now asserts "Payment issue" + the "Update payment method" link + the "Past due" PlanBadge tag **on options.html**) | ✅ |
 | 9 | `LockedFeature` production mount | C1, C6 | `✓ test/ui-kit/LockedFeature.test.tsx > LockedFeature > disables the wrapped interactive child when locked` (+3 more) and `webpack 5.108.1 compiled successfully` for the gallery. **No production mount** — DEFERRED to plan 2, recorded gap 1. | ❌ |
@@ -99,12 +99,12 @@ no command in this repo touches it; see §2.
 | 33 | Content-script presence marker, idempotent across repeat calls | C1 | `✓ test/content.test.ts > installContentScript — idempotency guard > sets the __pipInjected flag, which is what makes re-entry a no-op` · `✓ … registers exactly ONE onMessage listener across three installs` · `✓ … attaches its media-event listeners only once` | ✅ |
 | 35 | `typeof document !== "undefined"` runtime-entry guard | C1 | `src/content/content.ts:213` still guards the runtime entry; proof it works is that `test/content.test.ts` imports the module under happy-dom without self-executing — `✓ test/content.test.ts > localScore > is null when the frame has no candidate video` (+23 more in that file) | ✅ |
 | 36 | Separation guard's declared subject (content must never import antd / ui-kit) | C1 | `✓ test/separation.test.ts > content-script/ui-kit separation guard > passes on the real build: content chunk stays antd-free` | ✅ |
-| 37 | MV3, name/description/version; name literal pinned as the scaffold token | C1 | MV3 and the manifest generally are covered by `test/manifest.test.ts` (9 tests), but **the `manifest.name` scaffold-token assertion no longer exists** — the file was rewritten around the R-04 allowlist in an earlier task. See §2, finding 2. | ❌ |
+| 37 | MV3, name/description/version; name literal pinned as the scaffold token | C1 | **Restored in this pass:** `✓ test/manifest.test.ts > manifest identity > pins the child's name, so a half-finished scaffold rename cannot ship` · `✓ … is MV3 and carries a description and a version`. This also re-arms the compensating control that justified dropping inventory row 34's slug-token check. | ✅ |
 | 38 | `permissions` asserted with exact `toEqual` | C1 | `✓ test/manifest.test.ts > manifest permission allowlist (R-04) > declares exactly these three permissions and nothing else` (`["storage","activeTab","scripting"]`) | ✅ |
 | 39 | `activeTab` declared *and now consumed* | C1 | `✓ test/invariants.test.ts > gesture invariants > 1 — no await precedes executeScript inside the onClicked handler` · `✓ test/manifest.test.ts > … binds the shortcut to _execute_action, never a custom command` | ✅ |
 | 40 | Background service worker declaration (`toEqual`) | C1, C5 | The declaration is present in `src/static/manifest.json` and `background.js` builds (`✓ test/webpack-config.test.ts > webpack.prod.cjs > builds background.js and content.js with no errors`), but **the `toEqual` assertion on the `background` block is gone** from `test/manifest.test.ts`. See §2, finding 2. | ⚠️ |
 | 43 | `action` block asserted with `toEqual`; `default_popup` removed | C1 | `✓ test/manifest.test.ts > … has no default_popup — the toolbar button is the feature`. The `toEqual` shape assertion (which pinned `default_icon`) was **not** preserved against the new shape. See §2, finding 2. | ⚠️ |
-| 45 | `options_page` + top-level `icons` triple | C1, C2 | `✓ test/manifest.test.ts > … keeps the icon triple the factory actually generates`; `options_page: "options.html"` is exercised indirectly by every spec that navigates it, but **has no direct assertion**. See §2, finding 2. | ⚠️ |
+| 45 | `options_page` + top-level `icons` triple | C1, C2 | `✓ test/manifest.test.ts > … keeps the icon triple the factory actually generates` · `✓ test/manifest.test.ts > manifest identity > ships options.html as the extension's page` (**added in this pass**), plus the indirect exercise of every spec that navigates it | ✅ |
 | 47 | Webpack entries | C1, C5 | `✓ test/webpack-config.test.ts > webpack.prod.cjs > builds popup.js/options.js/popup.html/options.html alongside background/content`. The `options` entry is proven; the `popup` entry is deliberately still present (deletion-time change). | ✅ |
 | 49 | `test/webpack-config.test.ts` chunk/asset assertions | C1 | `✓ test/webpack-config.test.ts > webpack.prod.cjs > builds popup.js/options.js/popup.html/options.html alongside background/content` · `✓ … builds background.js and content.js with no errors` — the options + content halves are live; the popup half is what dies at deletion | ✅ |
 | 50 | `CopyPlugin` of `src/static` | C5 | `npm run build` emits `dist/manifest.json` and `dist/icons/*`; confirmed by `✓ 7 health.spec.ts:6:1 …`, which asserts `existsSync(dist/manifest.json)` | ✅ |
@@ -130,7 +130,7 @@ no command in this repo touches it; see §2.
 | 73 | `PaymentNudge` rendered above the plan badge | C1 | `✓ test/options/OptionsView.test.tsx > OptionsView — your plan row > renders the PaymentNudge only when past_due` · `✓ … renders no PaymentNudge when active` | ✅ |
 | 74 | `PlanBadge` (plan tag + status tag, "No plan" fallback) | C1, C2 | `✓ test/ui-kit/PlanBadge.test.tsx > PlanBadge > shows 'Lifetime' for plan=lifetime` · `✓ … shows 'Annual' + 'Active' for plan=annual, status=active` (kept live for plan 2) · `✓ … renders 'No plan' gracefully when plan is undefined` · `✓ test/options/OptionsView.test.tsx > … renders PlanBadge from plan/status props` · `✓ 12 restore.spec.ts:56:1 …` asserts Lifetime/Active/No-plan on the real page | ✅ |
 | 75 | Options "Upgrade" button + `UpgradePaywall` mount | C1, C2 | `✓ test/options/OptionsView.test.tsx > OptionsView — your plan row > offers Upgrade on the free tier` · `✓ … offers no Upgrade button on the pro tier` · `✓ … renders UpgradePaywall as open when paywallOpen is true`. The button is now also the **Layer-2 e2e subject** in billing/grace/dunning/renewal (present on Free, absent on Pro). | ✅ |
-| 76 | Options checkout hand-off (`chrome.tabs.create` + `window.open` fallback) | — | The *shape* is proven by the sibling handler: `✓ test/options/options.test.tsx > … opens Chrome's shortcut editor through chrome.tabs.create, not a chrome:// link`. The checkout handler itself has no test. Same gap as row 3 — see §2, finding 1. | ❌ |
+| 76 | Options checkout hand-off (`chrome.tabs.create` + `window.open` fallback) | C1 | Both branches now covered: `✓ test/options/options.test.tsx > Options container > opens the lifetime checkout URL, with the device id as client_reference_id` (chrome.tabs.create path) · `✓ … falls back to window.open when chrome.tabs is unavailable` (the `window.open(url, "_blank")` fallback, asserted with both arguments). The sibling `✓ … opens Chrome's shortcut editor through chrome.tabs.create, not a chrome:// link` covers the same pattern on the shortcuts handler. | ✅ |
 | 77 | Options entitlement lifecycle; `restore.spec.ts` device-B bootstrap | C1, C2 | `✓ test/options/options.test.tsx > Options container > refreshes tier on mount and renders the PlanBadge accordingly` · `✓ 12 restore.spec.ts:56:1 …` (device B bootstraps identity on `options.html`, as it always did) | ✅ |
 | 78 | Responsive layout, mobile screenshot | C2, C4 | `✓ 1 billing.spec.ts:29:1 …` writes `options-mobile.png` at 375×667 · `✓ 2 options-visual.spec.ts:54:3 › options page renders and themes its controls @mobile`. Note the card max-width is now **560px** with a `@media (max-width: 480px)` reflow, not the baseline's 480px — a deliberate rebuild change, not a regression. | ✅ |
 | 79 | `optionsview-free` / `optionsview-restore-404` gallery cards | C1, C6 | `✓ test/webpack-preview-config.test.ts > webpack.preview.cjs > builds the gallery entry to dist-preview/ without errors`. The gallery now carries **four** OptionsView cards (`optionsview-free`, `optionsview-pro`, `optionsview-embedded-on`, `optionsview-restore-404`) — a superset of the two required. | ✅ |
@@ -151,54 +151,100 @@ no command in this repo touches it; see §2.
 | 94 | Welcome-page shipped copy | C8 | **Not done.** `welcome-page/src/content.ts` still reads `appName: "Hello Gated"`, `"Open the popup" — "Click the Hello Gated icon in your toolbar"`, and the Uppercase/Reverse feature cards, and its `permissions` list still has only `storage` + `activeTab` (no `scripting`). See §2, finding 4. | ❌ |
 | 95 | `pro.restoreHref` `REPLACE_WITH_EXTENSION_ID` placeholder | C8 | `✗ welcome-page/src/content.ts: unfilled placeholder REPLACE_WITH_EXTENSION_ID` — the guard is intact and correctly still red, exactly as the decisions log requires | ✅ |
 
-**Row count: 79.** Verdicts: 63 ✅ exercised, 11 ⚠️ partial, 5 ❌ not exercised.
+**Row count: 79.** Verdicts: **67 ✅ exercised, 10 ⚠️ partial, 2 ❌ not exercised.**
+
+This supersedes the pre-remediation tally of 63 / 11 / 5. Four rows moved after the
+coordinator asked for the blocking gap to be closed: rows 3, 76 and 37 went
+❌ → ✅, row 45 went ⚠️ → ✅. **The two remaining ❌ are inventory row 9 (no
+production mount for `LockedFeature` — the intended, signed-off state of v1 free)
+and inventory row 94 (the welcome page still describes the template product).**
+Neither blocks the deletion.
 
 ---
 
 ## 2. Preserved capabilities that could NOT be exercised
 
-The most important section. Five ❌ rows and the partials worth escalating.
+Two ❌ rows remain, plus the partials worth escalating. The two findings that
+blocked or weakened the deletion decision have been closed; both are kept below
+with their resolutions, because the reasoning is what a reviewer needs, not just
+the green tick.
 
-### Finding 1 — the checkout hand-off has no coverage on the options side (rows 3, 76)
+### Finding 1 — the checkout hand-off had no coverage on the options side (rows 3, 76) — ✅ CLOSED
 
-This is the one to read twice. Decisions row 3 says, in its own words, that the
-`client_reference_id=device-abc-123` assertion **"must move from
-`test/popup/popup.test.tsx` to `test/options/options.test.tsx`."** It has not
-moved. Grepping `test/options/` for `checkout`, `client_reference_id` or a
-`chrome.tabs.create` call carrying a Stripe URL returns nothing.
+**Originally:** decisions row 3 says the `client_reference_id=device-abc-123`
+assertion **"must move from `test/popup/popup.test.tsx` to
+`test/options/options.test.tsx`."** It had not moved. The only automated proof
+that clicking a plan opens a checkout URL carrying the device id lived in a popup
+test — so deleting the popup would have left the money path's first step untested
+at every level, with no e2e spec opening the paywall either. A capability whose
+only proof lives inside the thing being deleted is not preserved; it is scheduled
+for loss.
 
-Today the *only* automated proof that clicking a plan opens a checkout URL
-carrying the device id is `test/popup/popup.test.tsx > Popup container >
-onCheckout opens the checkout URL via chrome.tabs.create` — a popup test. Delete
-the popup and the money path's first step becomes untested at every level: no
-unit test, and no e2e spec opens the paywall at all.
+**Now:** ported to `test/options/options.test.tsx`, exercising the real route a
+user takes — Free tier → `Upgrade` → paywall → the lifetime CTA:
 
-`src/options/options.tsx:157-164` is byte-equivalent to the popup's handler, so
-the *code* is preserved. The *proof* is not. **Write the options-side test before
-deleting the popup**, not after.
+```
+✓ test/options/options.test.tsx > Options container > opens the lifetime checkout URL, with the device id as client_reference_id
+✓ test/options/options.test.tsx > Options container > falls back to window.open when chrome.tabs is unavailable
+```
 
-### Finding 2 — four manifest assertions were dropped by an earlier task (rows 37, 40, 43, 45)
+What they assert, precisely:
+
+- `chrome.tabs.create` is called **exactly once**, and its `url` is
+  `https://buy.stripe.com/test-lifetime?client_reference_id=device-abc-123` —
+  the whole string, not a `toContain`. That pins three things at once: the link
+  resolved from `config.STRIPE_LINKS.lifetime` (i.e. the **lifetime** plan's
+  link, not another tier's), the separator logic, and the device id.
+- The fallback branch calls `window.open(url, "_blank")` with the same URL when
+  `chrome.tabs` is absent — the branch `options.tsx:159-163` has for
+  non-extension hosts. The popup's copy never covered this.
+- The CTA is matched via `` new RegExp(`choose ${PLANS[0].label}`) `` rather than
+  the literal "Choose Lifetime", so a future pricing change cannot silently
+  disarm the test by renaming the button.
+
+`config.ts` reads `process.env` at module-eval time, so the Stripe link is
+injected through a `vi.hoisted` block — the only hook that runs before the
+imports are evaluated. Without it `STRIPE_LINKS.lifetime` is `""` and the test
+could only have asserted a bare query string, which would not prove *which link*
+was opened.
+
+**The popup's own copy was left in place.** It stays until the popup does.
+
+### Finding 2 — four manifest assertions were dropped by an earlier task (rows 37, 40, 43, 45) — ⚠️ PARTIALLY CLOSED, deliberately
 
 `test/manifest.test.ts` was rewritten around the R-04 permission allowlist and
-lost assertions the decisions log expected to survive:
+lost four assertions the decisions log expected to survive. Two are restored; two
+are left off on purpose.
 
-- **Row 37** — the `manifest.name` literal (the scaffold-token check). Decisions
-  row 37 explicitly said "the `name` literal assertion in
-  `test/manifest.test.ts:41-43` stays as-is". Line 41 is now
-  `binds the shortcut to _execute_action`. Nothing asserts the name. This also
-  weakens the compensating control the log leaned on when dropping inventory
-  row 34's slug-token check — that drop was justified *because* row 37's name
-  assertion would still catch a missed rename. Neither exists now.
-- **Row 40** — the `background` `toEqual` shape assertion.
-- **Row 43** — the `action` `toEqual` shape assertion. Only
-  `action.default_popup === undefined` is checked, so `default_icon` could vanish
-  silently.
-- **Row 45** — `options_page: "options.html"`. Exercised indirectly (every spec
-  navigates it), directly asserted nowhere. The icons triple survives.
+**Restored** — a new `describe("manifest identity")` block sits alongside the
+allowlist assertions (the two guard different things, identity vs. privilege, and
+are not in tension):
 
-Not caused by this task, and not blocking the popup deletion — but each is a
-Preserved row whose protection is gone, and they should be restored rather than
-quietly re-decided.
+```
+✓ test/manifest.test.ts > manifest identity > pins the child's name, so a half-finished scaffold rename cannot ship
+✓ test/manifest.test.ts > manifest identity > is MV3 and carries a description and a version
+✓ test/manifest.test.ts > manifest identity > ships options.html as the extension's page
+```
+
+- **Row 37** — `manifest.name` is pinned to
+  `"Picture in Picture - Floating Video Player"` again. This matters beyond
+  itself: it was the **compensating control** the decisions log leaned on when it
+  dropped inventory row 34 (the `data-picture-in-picture-present` slug-token
+  check in `test/content.test.ts`). That drop was justified *because* the name
+  assertion would still catch a missed rename. With both gone, nothing did.
+  Re-arming this restores the justification retroactively.
+- **Row 45** — `options_page: "options.html"` now has a direct assertion instead
+  of only the indirect exercise of specs navigating it.
+
+**Deliberately not restored:**
+
+- **Row 40** (`background` `toEqual`) and **Row 43** (`action` `toEqual`) — these
+  whole-object shape assertions were narrowed on purpose when `default_popup` was
+  removed. Re-pinning entire objects would simply break again the next time the
+  shape moves, including at deletion time. `action.default_popup === undefined`
+  remains asserted, which is the part that carries the product decision. The
+  residual exposure is that `default_icon` could disappear without a test
+  failing; that is a conscious trade, recorded here rather than silently taken.
 
 ### Finding 3 — the $9.99 single plan card is never rendered in a test (row 65)
 
@@ -223,7 +269,9 @@ justification entry for `scripting`.
 `LockedFeature` has no production mount and its "Unlock → onOpenPaywall" trigger
 therefore has no production path. This is the *intended* state (DEFERRED, plan 2)
 and is recorded as gaps 1 and 2 of the decisions log — but it is still a
-capability the popup provides today and the options page does not. See §4.
+capability the popup provides today and the options page does not. It is one of
+the two remaining ❌ rows, and the only one that is a deliberate design choice
+rather than unfinished work. See §4.
 
 ### Lower-severity partials
 
@@ -247,14 +295,14 @@ is removed, so each is part of the cost of the deletion.
 | `e2e/health.spec.ts:9` | `expect(existsSync(resolve(DIST_DIR, "popup.html"))).toBe(true)` — the file stops being emitted, the assertion fails. It never navigates the popup, so it does **not** show up in a grep for specs that open it. | Assert `dist/options.html` instead (plus `content.js` / `background.js`). |
 | `test/webpack-config.test.ts:43-55` | `expect(assetsByChunkName?.popup).toBeDefined()` and `expect(assetNames).toContain("popup.html")` fail once the entry and its `HtmlWebpackPlugin` go. The test title (`builds popup.js/options.js/popup.html/options.html …`) also becomes a lie. | Drop the popup half; keep the options + content assertions (row 49). |
 | `test/webpack-preview-config.test.ts` | Does **not** pin card ids — it only builds the gallery entry. But `preview/gallery.tsx:21` does `import { PopupView } from "../src/popup/PopupView"`, so deleting the source makes the preview build fail to resolve and this test fails as a *build* error, not an assertion error. | Remove the two `PopupView` cards and the import from `gallery.tsx` in the same commit as the source deletion. |
-| The 10 popup unit tests | `test/popup/PopupView.test.tsx` (6) and `test/popup/popup.test.tsx` (4) all import from `src/popup/`, so they fail to resolve. Two of the four in `popup.test.tsx` carry behaviour the options page also has and now also tests ("no Free flash", tier pass-through); **one does not** — `onCheckout opens the checkout URL via chrome.tabs.create` (finding 1). | Port finding 1's assertion first, then delete. |
+| The 10 popup unit tests | `test/popup/PopupView.test.tsx` (6) and `test/popup/popup.test.tsx` (4) all import from `src/popup/`, so they fail to resolve. **Every behaviour the four container tests cover is now also covered on the options side** — device-id/entitlement bootstrap, tier pass-through, the cached-Pro seed, and (as of this pass) the checkout hand-off. The six `PopupView` tests cover `UppercaseTool` / `ProTool` / the popup's own `LockedFeature` mount, i.e. exactly the surfaces §4 drops. | Delete with the popup; no port outstanding. |
 | `e2e/popup-loads.spec.ts` | Navigates `popup.html`; the page 404s. This is the popup's own test and it is meant to die with it — its Free-badge half is already re-proven on options by `billing.spec.ts`, its locked-fieldset half is parked. | Delete with the popup. |
 | `e2e/harness/identity.ts` | Does not break — but its `waitForDeviceId` doc comment cites `src/popup/popup.tsx`'s `useState<Tier>("free")` by name and becomes a dangling reference. This is when CORE drift file #3 (predicted in `core-drift.md`) actually happens. | Repoint the comment at `src/options/options.tsx`, add the row to `core-drift.md`. |
 | `e2e/README.md:12` | Lists `popup-loads.spec.ts — popup Free, pro tool locked` in the hermetic set. | Rewrite for the retargeted spec set (decisions row 26). |
 | `webpack/webpack.common.cjs:29, 63-72` | The `popup` entry and its `HtmlWebpackPlugin` reference `src/popup/index.tsx` and `src/popup/popup.html`; the build fails to resolve. | Remove both (decisions rows 47, 48). |
 
-Net expected count change at deletion: **−10 unit tests** (274 → 264 passing),
-**−1 e2e spec** (13 collected → 12).
+Net expected count change at deletion: **−10 unit tests** (279 → 269 passing),
+**−1 e2e spec** (13 collected → 12). No capability loses its last test.
 
 ---
 
@@ -337,15 +385,24 @@ job, which is what §1 and §2 are for.
 ## 6. The decision
 
 Everything the popup did that a user can reach is now on the options page and
-exercised there — with **one exception that should be closed first**: finding 1,
-the checkout hand-off, whose only test is a popup test. Porting that single
-assertion into `test/options/options.test.tsx` is a few lines and removes the
-one place where deleting the popup would delete real coverage.
+exercised there. **67 of 79 Preserved rows are exercised end-to-end, 10 are
+partial, 2 are not exercised** — and neither of the two is a capability that
+would be lost by deleting the popup:
 
-Findings 2, 3 and 4 are pre-existing debt surfaced by this audit. None of them is
-made worse by the deletion, and none of them is a reason to keep the popup.
+- **Row 9** (`LockedFeature` has no production mount) is the intended,
+  signed-off shape of v1 free. It is not something the options page failed to
+  inherit; it is something plan 2 will add.
+- **Row 94** (the welcome page still describes the template product) is a
+  separate deliverable that neither the popup nor the options page provides.
 
-Findings 5 / §4 are the intended, signed-off shape of v1 free: no Pro-gated
-surface until plan 2.
+The one finding that genuinely blocked this decision — the checkout hand-off,
+whose only proof was a popup test — is closed: `test/options/options.test.tsx`
+now asserts the full lifetime checkout URL and its `client_reference_id`, on both
+the `chrome.tabs.create` and `window.open` branches. The popup's copy was left
+untouched.
+
+Findings 3 and 4 are pre-existing debt surfaced by this audit. Finding 2 is half
+closed and half a recorded conscious trade. None of them is made worse by the
+deletion, and none is a reason to keep the popup.
 
 **Deletion remains ungated. Nothing above authorises it.**

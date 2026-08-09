@@ -63,3 +63,34 @@ describe("manifest permission allowlist (R-04)", () => {
     });
   });
 });
+
+/* ============================================================================
+ * SCAFFOLD-RENAME GUARD — restored, not new.
+ *
+ * The factory stamps this child's name into the manifest, and the template
+ * pinned that literal so a half-finished rename could not ship. The R-04
+ * rewrite of this file dropped the assertion; it is back because it was ALSO
+ * the compensating control for deliberately dropping inventory row 34, the
+ * `data-picture-in-picture-present` slug-token check in test/content.test.ts.
+ * That drop was justified on the grounds that this assertion would still catch
+ * a missed rename. With both gone, nothing did. The two are not in tension with
+ * the allowlist above — one guards identity, the other guards privilege.
+ * ==========================================================================*/
+describe("manifest identity", () => {
+  it("pins the child's name, so a half-finished scaffold rename cannot ship", () => {
+    expect(manifest.name).toBe("Picture in Picture - Floating Video Player");
+  });
+
+  it("is MV3 and carries a description and a version", () => {
+    expect(manifest.manifest_version).toBe(3);
+    expect(manifest.description).toBeTruthy();
+    expect(manifest.version).toMatch(/^\d+\.\d+\.\d+$/);
+  });
+
+  // Deliberately NOT a toEqual on the whole `action`/`background` blocks — those
+  // were narrowed on purpose when default_popup was removed, and re-pinning whole
+  // objects would just break again the next time the shape moves.
+  it("ships options.html as the extension's page", () => {
+    expect(manifest.options_page).toBe("options.html");
+  });
+});

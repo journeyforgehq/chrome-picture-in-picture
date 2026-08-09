@@ -4,11 +4,24 @@ import { render, screen, waitFor, fireEvent } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 
-const { refreshMock, restoreMock, getCachedMock } = vi.hoisted(() => ({
-  refreshMock: vi.fn(),
-  restoreMock: vi.fn(),
-  getCachedMock: vi.fn(),
-}));
+/* ============================================================================
+ * src/billing/config.ts reads process.env at MODULE-EVAL time, and webpack's
+ * DefinePlugin is what fills these in for a real build. vi.hoisted runs before
+ * any import in this file is evaluated, which is the only window in which this
+ * assignment can still reach config.ts. Without it STRIPE_LINKS.lifetime is ""
+ * and the checkout test below could only assert a bare query string — which
+ * would not prove the LINK is the one the lifetime plan maps to.
+ * ==========================================================================*/
+const { refreshMock, restoreMock, getCachedMock, LIFETIME_LINK } = vi.hoisted(() => {
+  const link = "https://buy.stripe.com/test-lifetime";
+  process.env.STRIPE_LIFETIME_URL = link;
+  return {
+    refreshMock: vi.fn(),
+    restoreMock: vi.fn(),
+    getCachedMock: vi.fn(),
+    LIFETIME_LINK: link,
+  };
+});
 
 vi.mock("../../src/billing", async () => {
   const actual = await vi.importActual<typeof import("../../src/billing")>("../../src/billing");
@@ -35,6 +48,11 @@ vi.mock("../../src/billing/chrome-storage", () => ({
 
 import { Options } from "../../src/options/options";
 import { DEFAULT_SETTINGS } from "../../src/pip/state";
+import { PLANS } from "../../src/billing/plans";
+
+/** The paywall CTA, derived from PLANS so a pricing change can't silently
+ *  disarm the checkout test by renaming the button. */
+const planCta = new RegExp(`choose ${PLANS[0].label}`, "i");
 
 /** chrome.storage.local backed by a Map, so getSettings/setSettings round-trip
  * for real instead of being mocked out of the wiring under test. */
@@ -127,6 +145,51 @@ describe("Options container", () => {
     render(<Options />);
     expect(await screen.findByTestId("tier-badge")).toHaveTextContent("Pro");
     expect(screen.queryByText("Free")).not.toBeInTheDocument();
+  });
+
+  /* ==========================================================================
+   * THE MONEY PATH'S FIRST STEP. Ported from test/popup/popup.test.tsx, which
+   * is deleted with the popup — the popup's copy stays until then.
+   *
+   * `client_reference_id` is not cosmetic. backend/src/billing/webhook.ts reads
+   * `checkout.session.completed`'s `client_reference_id` as the device to grant,
+   * and logs `grant_no_device` at ERROR when it is missing. Drop this parameter
+   * and a customer's money arrives while their entitlement never does — a
+   * failure that is invisible on the client and only shows up as a support
+   * ticket. So this asserts the WHOLE url, not just that a tab opened.
+   * ========================================================================*/
+  it("opens the lifetime checkout URL, with the device id as client_reference_id", async () => {
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+
+    // Free tier → the Upgrade button is the only route into the paywall.
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    fireEvent.click(await screen.findByRole("button", { name: planCta }));
+
+    expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
+    const arg = (chrome.tabs.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
+    expect(arg.url).toBe(`${LIFETIME_LINK}?client_reference_id=device-abc-123`);
+  });
+
+  it("falls back to window.open when chrome.tabs is unavailable", async () => {
+    const open = vi.fn();
+    vi.stubGlobal("open", open);
+    // Same chrome stub minus `tabs` — the shape a non-extension host presents.
+    vi.stubGlobal("chrome", {
+      storage: { local: storage.area },
+      permissions: { request: permissionsRequest, remove: permissionsRemove },
+    });
+
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    fireEvent.click(await screen.findByRole("button", { name: planCta }));
+
+    expect(open).toHaveBeenCalledWith(
+      `${LIFETIME_LINK}?client_reference_id=device-abc-123`,
+      "_blank",
+    );
   });
 });
 
