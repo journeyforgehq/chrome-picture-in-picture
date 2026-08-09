@@ -1,6 +1,8 @@
 /// <reference types="chrome" />
 import { config } from "../billing/config";
 import { decideOutcome } from "./action";
+import { pickWinner, recordScore, pruneFrame, dropTab, type TabScores } from "./arbitrate";
+import { PIP_COORD, PIP_SCORE_REPORT } from "../pip/messages";
 import { pipEntry } from "../pip/entry";
 import type { PipEntryResult } from "../pip/entry";
 import { showToast } from "../pip/toast";
@@ -65,6 +67,73 @@ export function handleMessage(_message: RelayMessage): RelayResult {
   return { handled: false };
 }
 
+/* ============================================================================
+ * Frame arbitration — the worker half. See src/content/content.ts for the why.
+ * ============================================================================
+ *
+ * There is no API here that can enumerate a tab's frames: chrome.webNavigation
+ * would, and the three-permission manifest forbids it (R-04). So frames
+ * announce themselves, and `sender.frameId` — which arrives free on every
+ * runtime message — is the frame table. The verdict goes back with
+ * chrome.tabs.sendMessage(tabId, msg, { frameId }), which needs a host
+ * permission for that tab but NOT the "tabs" permission.
+ *
+ * None of this runs inside a click. The gesture path (below) reads a value
+ * that was already written; nothing here can put the user activation at risk.
+ * ==========================================================================*/
+
+const FRAME_SCORES_KEY = "frameScores";
+
+async function readFrameScores(): Promise<TabScores> {
+  const stored = await chrome.storage.session.get(FRAME_SCORES_KEY);
+  return (stored[FRAME_SCORES_KEY] as TabScores | undefined) ?? {};
+}
+
+async function writeFrameScores(all: TabScores): Promise<void> {
+  await chrome.storage.session.set({ [FRAME_SCORES_KEY]: all });
+}
+
+// Reports from different frames of the same tab arrive interleaved, and each
+// one is a read-modify-write on ONE storage key. Two in flight at once and the
+// later write clobbers the earlier frame's entry. Serialising them costs
+// nothing (they are already throttled to ~1/s/frame) and removes the race
+// outright. Module state does not survive worker termination, which is fine:
+// the chain just restarts empty, and storage is the real state.
+let arbitrationChain: Promise<void> = Promise.resolve();
+
+function enqueueArbitration(tabId: number, frameId: number, score: number | null): void {
+  arbitrationChain = arbitrationChain
+    .then(() => arbitrateTab(tabId, frameId, score))
+    .catch(() => undefined);
+}
+
+async function arbitrateTab(tabId: number, frameId: number, score: number | null): Promise<void> {
+  let all = recordScore(await readFrameScores(), tabId, frameId, score);
+  const frames = Object.keys(all[tabId] ?? {}).map(Number);
+  const winner = pickWinner(all[tabId] ?? {});
+
+  // A frame that has navigated away rejects here, and that rejection is the
+  // ONLY liveness signal available without webNavigation — so it is also how
+  // stale entries get pruned. Nothing else ever removes them.
+  const dead: number[] = [];
+  await Promise.all(
+    frames.map(async (id) => {
+      try {
+        await chrome.tabs.sendMessage(
+          tabId,
+          { type: PIP_COORD, isWinner: id === winner },
+          { frameId: id }
+        );
+      } catch {
+        dead.push(id);
+      }
+    })
+  );
+
+  for (const id of dead) all = pruneFrame(all, tabId, id);
+  await writeFrameScores(all);
+}
+
 // --- chrome.* wiring (untested shell; exercised by e2e in a later plan) ---
 if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
   // Register the post-uninstall feedback page. setUninstallURL persists, but we
@@ -86,6 +155,34 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
     const result = handleMessage(message as RelayMessage);
     sendResponse(result);
     return false;
+  });
+
+  // Frame self-registration. Returns false (no async sendResponse): the frame
+  // is telling, not asking, and holding the channel open for a verdict it will
+  // receive on its own listener anyway would just be a second round trip.
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    const msg = message as { type?: string; score?: unknown } | null;
+    if (!msg || msg.type !== PIP_SCORE_REPORT) return false;
+    // sender.tab is absent for messages from the options page/popup; frameId
+    // is 0 for a top frame, so `!frameId` would be wrong here.
+    const tabId = sender.tab?.id;
+    if (tabId === undefined || sender.frameId === undefined) return false;
+    const score = typeof msg.score === "number" ? msg.score : null;
+    enqueueArbitration(tabId, sender.frameId, score);
+    return false;
+  });
+
+  // A closed tab's frames can never report again; without this the session map
+  // grows for the life of the browser. (tabs.onRemoved needs no permission —
+  // only the url/title/favIconUrl fields are gated by "tabs".)
+  chrome.tabs.onRemoved?.addListener((tabId) => {
+    arbitrationChain = arbitrationChain
+      .then(async () => {
+        const all = await readFrameScores();
+        const next = dropTab(all, tabId);
+        if (next !== all) await writeFrameScores(next);
+      })
+      .catch(() => undefined);
   });
 
   // ═══════════════════════════════════════════════════════════════════════════
