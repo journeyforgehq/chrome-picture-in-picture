@@ -2,47 +2,39 @@
 // GENERATED - do not edit here. CORE file vendored from chrome-ext-factory.
 // Edit upstream in the template and run `sync-core` to propagate. Local edits
 // are reported as drift and refused without --force.
+//
+// LOCAL DRIFT (recorded in docs/superpowers/plans/core-drift.md): this child
+// ships a single lifetime plan at $9.99. Per-child pricing is arguably what
+// this file is for; the drift is accepted, not accidental.
 // =============================================================================
 import type { PaywallPlan } from "../ui-kit";
 
 /**
- * The displayed paywall plans — the SINGLE source (imported by popup + options).
+ * The displayed paywall plans — the SINGLE source (imported by options.tsx).
  * Keep `price`/`priceNote` in sync with your Stripe prices. The `id` maps to a
  * STRIPE_LINKS[id] checkout URL (see billing/config.ts). Rendered as plan cards
  * (see ui-kit/UpgradePaywall) — `description` + `features` are the upsell content.
  *
- * PRICING RULE (enforced by test/plans.test.ts): keep the ladder non-dominated.
- * If you lower `lifetime`, it must stay ABOVE a year of `annual` — otherwise the
- * annual plan is strictly dominated (nobody renews yearly when one payment costs
- * the same or less). Dropping to a single plan is fine; a broken ladder is not.
+ * PRICING RULE (enforced by test/plans.test.ts): this child is lifetime-only, so
+ * the template's non-domination ladder rule does not apply — and could not
+ * protect anything if it did, since every one of its clauses is conditional on
+ * `monthly`/`annual` being present and passes vacuously on a one-plan array.
+ * The test pins the shape that actually matters here instead: exactly one plan,
+ * id `lifetime`, price `$9.99`. Re-adding a ladder means re-adding the
+ * non-domination rule with it (lifetime must stay ABOVE a year of annual).
+ *
+ * `Plan` still admits "monthly" and "annual" (src/contract.ts) and
+ * `config.STRIPE_LINKS` still carries all three keys — the paid-tier plan can
+ * re-add a subscription without a contract or build-config change.
  */
 export const PLANS: PaywallPlan[] = [
   {
-    id: "monthly",
-    label: "Monthly",
-    price: "$3.99",
-    unit: "/mo",
-    priceNote: "Billed monthly",
-    description: "Full Pro access, month to month.",
-    features: ["Every Pro tool", "Priority support", "Cancel anytime"],
-  },
-  {
-    id: "annual",
-    label: "Annual",
-    price: "$29",
-    unit: "/yr",
-    priceNote: "Just $2.42/mo — save 40%",
-    description: "Best value for regular use.",
-    highlight: true,
-    features: ["Everything in Monthly", "2 months free vs. monthly", "Priority support"],
-  },
-  {
     id: "lifetime",
     label: "Lifetime",
-    price: "$79",
+    price: "$9.99",
     unit: "once",
     priceNote: "One-time payment",
     description: "Pay once, yours forever.",
-    features: ["Everything in Annual", "No renewals, ever", "All future updates included"],
+    features: ["Every Pro feature", "No renewals, ever", "All future updates included"],
   },
 ];

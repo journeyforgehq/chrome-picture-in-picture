@@ -17,7 +17,7 @@ import {
   SCREENSHOT_DIR,
 } from "./harness/config";
 
-const popupUrl = (id: string) => `chrome-extension://${id}/popup.html`;
+const optionsUrl = (id: string) => `chrome-extension://${id}/options.html`;
 
 // Far-future renewal period end (year ~2100) so the renewed entitlement is not stale.
 const FAR_FUTURE = 4102444800;
@@ -29,11 +29,14 @@ test.beforeAll(() => {
 test("renewal keeps both devices pro; cancel re-locks both", async ({ ext }) => {
   // --- 1. Device A = the ext fixture; Device B = a fresh install. ---
   const pageA = await ext.context.newPage();
-  await pageA.goto(popupUrl(ext.extensionId));
+  await pageA.goto(optionsUrl(ext.extensionId));
 
   const extB = await launchExtension();
   const pageB = await extB.context.newPage();
-  await pageB.goto(popupUrl(extB.extensionId));
+  await pageB.goto(optionsUrl(extB.extensionId));
+
+  const tierBadgeA = pageA.locator('[data-testid="tier-badge"]');
+  const tierBadgeB = pageB.locator('[data-testid="tier-badge"]');
 
   // --- 2. Read both device ids (different user-data-dirs ⇒ different ids). ---
   const deviceIdA = await waitForDeviceId(pageA);
@@ -67,19 +70,15 @@ test("renewal keeps both devices pro; cancel re-locks both", async ({ ext }) => 
   );
   expect(grantB.status).toBe(200);
 
-  // --- 4. Reload both popups → BOTH Pro, pro tool unlocked + interactive. ---
+  // --- 4. Reload both options pages → BOTH Pro, Upgrade affordance gone on both. ---
   await pageA.reload();
   await pageB.reload();
 
-  await expect(pageA.getByText("Pro", { exact: true })).toBeVisible();
-  const runProBtnA = pageA.getByRole("button", { name: /run pro tool/i });
-  await expect(runProBtnA).toBeVisible();
-  expect(await runProBtnA.isDisabled()).toBe(false);
+  await expect(tierBadgeA).toHaveText("Pro");
+  await expect(pageA.getByRole("button", { name: "Upgrade" })).toHaveCount(0);
 
-  await expect(pageB.getByText("Pro", { exact: true })).toBeVisible();
-  const runProBtnB = pageB.getByRole("button", { name: /run pro tool/i });
-  await expect(runProBtnB).toBeVisible();
-  expect(await runProBtnB.isDisabled()).toBe(false);
+  await expect(tierBadgeB).toHaveText("Pro");
+  await expect(pageB.getByRole("button", { name: "Upgrade" })).toHaveCount(0);
 
   // --- 5. Renewal cascade → both still Pro (the renew touched every cust: device). ---
   const renew = await postWebhook(
@@ -95,10 +94,10 @@ test("renewal keeps both devices pro; cancel re-locks both", async ({ ext }) => 
 
   await pageA.reload();
   await pageB.reload();
-  await expect(pageA.getByText("Pro", { exact: true })).toBeVisible();
-  await expect(pageB.getByText("Pro", { exact: true })).toBeVisible();
+  await expect(tierBadgeA).toHaveText("Pro");
+  await expect(tierBadgeB).toHaveText("Pro");
 
-  // --- 6. Cancel cascade → BOTH back to Free, pro tool re-locked (opacity 0.5 + disabled). ---
+  // --- 6. Cancel cascade → BOTH back to Free, Upgrade affordance back on both. ---
   const revoke = await postWebhook(
     WORKER_BASE_URL,
     subscriptionDeleted({ customerId: E2E_CUSTOMER_ID, subId: E2E_SUB_ID }),
@@ -109,15 +108,11 @@ test("renewal keeps both devices pro; cancel re-locks both", async ({ ext }) => 
   await pageA.reload();
   await pageB.reload();
 
-  await expect(pageA.getByText("Free", { exact: true })).toBeVisible();
-  const lockedFieldsetA = pageA.locator(".ui-kit-locked-feature fieldset");
-  await expect(lockedFieldsetA).toHaveCSS("opacity", "0.5");
-  expect(await lockedFieldsetA.evaluate((el: HTMLFieldSetElement) => el.disabled)).toBe(true);
+  await expect(tierBadgeA).toHaveText("Free");
+  await expect(pageA.getByRole("button", { name: "Upgrade" })).toBeVisible();
 
-  await expect(pageB.getByText("Free", { exact: true })).toBeVisible();
-  const lockedFieldsetB = pageB.locator(".ui-kit-locked-feature fieldset");
-  await expect(lockedFieldsetB).toHaveCSS("opacity", "0.5");
-  expect(await lockedFieldsetB.evaluate((el: HTMLFieldSetElement) => el.disabled)).toBe(true);
+  await expect(tierBadgeB).toHaveText("Free");
+  await expect(pageB.getByRole("button", { name: "Upgrade" })).toBeVisible();
 
   // --- 7. Screenshot both, then close. ---
   await pageA.screenshot({ path: resolve(SCREENSHOT_DIR, "cascade-a.png") });
@@ -126,4 +121,26 @@ test("renewal keeps both devices pro; cancel re-locks both", async ({ ext }) => 
   await pageB.close();
   await pageA.close();
   await extB.close();
+});
+
+/* ============================================================================
+ * PARKED — not deleted, not softened. See the identical block in
+ * e2e/billing.spec.ts and gaps 1-2 of
+ * docs/superpowers/plans/decisions-picture-in-picture.md.
+ *
+ * Steps 4 and 6 used to prove the cascade at Layer 2 on BOTH installs via
+ * `ProTool` / `.ui-kit-locked-feature fieldset` in the popup. v1 free has no
+ * Pro-gated production surface; plan 2 restores one on the options page.
+ * ==========================================================================*/
+test.fixme("PLAN 2: the cancel cascade re-locks the Pro-gated rows on both installs", async ({
+  ext,
+}) => {
+  const page = await ext.context.newPage();
+  await page.goto(optionsUrl(ext.extensionId));
+
+  const lockedFieldset = page.locator(".ui-kit-locked-feature fieldset");
+  await expect(lockedFieldset).toHaveCSS("opacity", "0.5");
+  expect(await lockedFieldset.evaluate((el: HTMLFieldSetElement) => el.disabled)).toBe(true);
+
+  await page.close();
 });

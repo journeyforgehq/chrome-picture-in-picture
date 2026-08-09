@@ -36,6 +36,10 @@ vi.mock("../../src/billing/chrome-storage", () => ({
 
 import { Popup } from "../../src/popup/popup";
 import { getDeviceId, createEntitlement } from "../../src/billing";
+// The subject of the checkout test below is the client_reference_id on the URL,
+// NOT which plan was clicked — so the CTA is derived from PLANS rather than
+// hard-coded ("Choose Annual"), which pricing changes would keep breaking.
+import { PLANS } from "../../src/billing/plans";
 
 describe("Popup container", () => {
   beforeEach(() => {
@@ -74,7 +78,8 @@ describe("Popup container", () => {
     render(<Popup />);
     await waitFor(() => expect(refreshMock).toHaveBeenCalled());
     fireEvent.click(screen.getByRole("button", { name: /unlock/i }));
-    fireEvent.click(await screen.findByRole("button", { name: /choose annual/i }));
+    const cta = new RegExp(`choose ${PLANS[0].label}`, "i");
+    fireEvent.click(await screen.findByRole("button", { name: cta }));
     expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
     const arg = (chrome.tabs.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
     expect(arg.url).toContain("client_reference_id=device-abc-123");
