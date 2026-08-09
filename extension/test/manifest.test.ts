@@ -93,4 +93,18 @@ describe("manifest identity", () => {
   it("ships options.html as the extension's page", () => {
     expect(manifest.options_page).toBe("options.html");
   });
+
+  // FOUND BY LOOKING AT THE REAL PAGE (task 22). The preview gallery supplies
+  // its own HTML shell, so the options page's <title> is invisible to every
+  // gallery screenshot and to every spec that asserts on rendered React — and
+  // it still read "Reference Extension — Settings" while the <h2> six lines
+  // below it read "Picture in Picture — Settings". It is the string Chrome puts
+  // in the tab and in the window title, i.e. the one piece of the options page
+  // that React never renders. Pinned here with the manifest name because it is
+  // the same failure mode: a half-finished scaffold rename.
+  it("names the options page after the product, not the scaffold", () => {
+    const html = readFileSync(path.resolve(__dirname, "../src/options/options.html"), "utf8");
+    expect(html).toContain("<title>Picture in Picture — Settings</title>");
+    expect(html).not.toMatch(/Reference Extension/);
+  });
 });
