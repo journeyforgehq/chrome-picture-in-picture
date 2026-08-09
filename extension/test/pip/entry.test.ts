@@ -147,3 +147,28 @@ describe("pipEntry — serialization safety", () => {
     expect(src.slice(0, callAt)).not.toMatch(/\bawait\b/);
   });
 });
+
+describe("pipEntry — synchronicity is a contract, not an implementation detail", () => {
+  // content.ts's localScore() temporarily lifts window.__pipCoord so a stood-down
+  // frame can still report a score (otherwise a loser reports null forever and can
+  // never win the tab back). That is safe ONLY because pipEntry runs to completion
+  // synchronously — no other frame or event can observe the lifted flag.
+  //
+  // The existing guard only forbids `await` BEFORE requestPictureInPicture(). An
+  // await anywhere else would still make the lift a real race in every frame, on
+  // every page. These two assertions defend the coupling that content.ts relies on.
+  it("is not an async function", () => {
+    expect(pipEntry.constructor.name).toBe("Function");
+    expect(Object.prototype.toString.call(pipEntry)).toBe("[object Function]");
+  });
+
+  it("contains no await anywhere in its body, not merely before the PiP call", () => {
+    expect(pipEntry.toString()).not.toMatch(/\bawait\b/);
+  });
+
+  it("returns a plain object rather than a thenable", () => {
+    document.body.innerHTML = "";
+    const r = pipEntry({ dryRun: true }) as unknown as { then?: unknown };
+    expect(typeof r.then).toBe("undefined");
+  });
+});

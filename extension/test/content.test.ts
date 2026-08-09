@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import {
   installContentScript,
   localScore,
-  markPresent,
-  MARKER_ATTR,
   PIP_COORD,
   PIP_SCORE_REPORT,
   PIP_SCORE_REQUEST,
@@ -91,7 +89,6 @@ beforeEach(() => {
   };
   delete window.__pipInjected;
   delete window.__pipCoord;
-  document.documentElement.removeAttribute(MARKER_ATTR);
   document.body.innerHTML = "";
 
   // DECLARED environment fakes, not assumptions: happy-dom implements neither
@@ -122,29 +119,36 @@ afterEach(() => {
 });
 
 describe("installContentScript — idempotency guard", () => {
+  // A spike measured that scripting.executeScript and registerContentScripts share
+  // ONE isolated world per extension per frame, and that the file body runs on EVERY
+  // injection: three injections produced three evaluations. Without a guard above
+  // the listener registration, that frame would hold three onMessage listeners and
+  // answer every message three times.
   it("registers exactly ONE onMessage listener across three installs", () => {
     installContentScript();
     installContentScript();
     installContentScript();
     expect(addListener).toHaveBeenCalledTimes(1);
-    expect(listeners).toHaveLength(1);
   });
 
-  it("sets the window.__pipInjected guard flag", () => {
-    expect(window.__pipInjected).toBeUndefined();
+  it("sets the __pipInjected flag, which is what makes re-entry a no-op", () => {
     installContentScript();
     expect(window.__pipInjected).toBe(true);
   });
 
-  it("keeps the presence marker the previous content script set", () => {
+  it("attaches its media-event listeners only once", () => {
     installContentScript();
-    expect(document.documentElement.getAttribute(MARKER_ATTR)).toBe("true");
+    const after1 = docListeners.length;
+    installContentScript();
+    installContentScript();
+    expect(docListeners.length).toBe(after1);
   });
 
-  it("markPresent stays exported and idempotent", () => {
-    markPresent(document);
-    markPresent(document);
-    expect(document.documentElement.getAttribute(MARKER_ATTR)).toBe("true");
+  it("reports its score to the worker only once, not once per install", () => {
+    installContentScript();
+    installContentScript();
+    installContentScript();
+    expect(sendMessage).toHaveBeenCalledTimes(1);
   });
 });
 

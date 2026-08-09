@@ -81,13 +81,16 @@ declare global {
  */
 export const SCORE_THROTTLE_MS = 1000;
 
-/** Legacy presence marker on <html>. Kept so nothing observable was dropped. */
-export const MARKER_ATTR = "data-picture-in-picture-present";
-
-/** Set a presence marker on <html>. Idempotent. */
-export function markPresent(doc: Document): void {
-  doc.documentElement.setAttribute(MARKER_ATTR, "true");
-}
+// REMOVED 2026-08-07: the factory template's `data-…-present` marker on <html>.
+//
+// It was a page-VISIBLE attribute on every page the script ran on — a textbook
+// extension fingerprint, readable by any script on the page, and squarely at odds
+// with the manifest's own stated reason for shipping no web-accessible resources
+// ("less extension fingerprinting surface").
+//
+// It is not a silent drop: the decision log records the presence marker as
+// superseded by `window.__pipInjected`, which does the same job in the ISOLATED
+// world where the page cannot observe it. Nothing needed the DOM attribute.
 
 /**
  * This frame's score for the tab-wide contest, or null when it has no
@@ -141,7 +144,6 @@ export function installContentScript(): void {
   // no-content-script state: one actor, deterministically.
   setCoord(window === window.top);
 
-  markPresent(document);
 
   chrome.runtime.onMessage.addListener((message, _sender, sendResponse) => {
     const msg = message as { type?: string; isWinner?: boolean } | null;
