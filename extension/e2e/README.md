@@ -55,9 +55,40 @@ Two loops:
 
 ```bash
 npm run e2e:install   # one-time: download Chrome-for-Testing
-npm run e2e           # hermetic loop
-HEADLESS=1 npm run e2e   # headless-new (CI)
+npm run e2e           # hermetic loop  (headed — see below)
 ```
+
+### Headed is not a preference — `HEADLESS=1` does not work
+
+Every loop that loads the extension must run **headed**. `HEADLESS=1` is still
+read by `harness/extension.ts` and `granted-dist.ts`, and it still launches a
+browser — but **no MV3 service worker ever starts**, so `waitForEvent(
+"serviceworker")` times out and the run dies before the first assertion, with an
+error that names the timeout rather than the cause.
+
+Measured against the unmodified `dist/` on Playwright 1.49.1, both arms in one
+run:
+
+| | service workers | outcome |
+|---|---|---|
+| headed (control) | 1 — `chrome-extension://…/background.js` | ready in 604ms |
+| `headless: true` | 0 | 15s timeout |
+
+The control arm matters: without it a zero is equally consistent with a broken
+`dist/`, and the harness would be blamed for a browser limitation.
+
+This is **not caused by anything in this repo** — it is Chromium's headless mode
+under Playwright 1.49. Consequences worth knowing before wiring CI:
+
+- **CI must supply a display** (`xvfb-run -a npm run e2e`, or a runner with one).
+  Headless is the usual CI default, so this will not fail over to "slower but
+  working" — it will fail outright.
+- The `HEADLESS=1` branch is dead code, deliberately left in place:
+  `harness/extension.ts` is a CORE file vendored from `chrome-ext-factory`
+  (`.factory.json`), so removing it here would register as drift. If a later
+  Chromium starts extension workers headless, the switch is already wired.
+- `e2e:fixtures` and `e2e:visual` load **no extension** and are unaffected —
+  they drive `pipEntry` and the preview gallery in an ordinary page.
 
 ## Notes
 
