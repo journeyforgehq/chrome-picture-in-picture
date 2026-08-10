@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+import { describe, it, expect, beforeEach, afterEach, vi } from "vitest";
 import { pipEntry } from "../../src/pip/entry";
+import type { PipPrefs } from "../../src/pip/prefs";
 
 /** Build a <video> whose media properties happy-dom does not simulate. */
 function video(opts: {
@@ -491,5 +492,185 @@ describe("pipEntry — a rejected requestPictureInPicture must be REPORTED", () 
     expect(r.outcome).toBe("THREW");
     expect(r.errorName).toBe("InvalidStateError");
     expect(r.acted).toBe(true);
+  });
+});
+
+/* ============================================================================
+ * pipEntry — prefs plumbing. THIS BLOCK ASSERTS NO CHANGE IN BEHAVIOUR.
+ * ============================================================================
+ * Every case below must end in the NATIVE window, because native is all this
+ * function can do today. What is being measured is that the routing decision
+ * can be CARRIED — warm from the worker's cache, cold from a page-side storage
+ * read — without disturbing the path the free tier already takes. The Document
+ * PiP branch lands in a later task, and when it does, any regression here is
+ * attributable to it rather than to the plumbing.
+ *
+ * WHY THE ASYMMETRY IN THE COLD PATH IS SAFE (S-11): the WORKER's gesture scope
+ * is turn-based — `await Promise.resolve()`, 0ms, no IPC, still loses it — but
+ * the PAGE's transient activation is time-based, ~5s, and survives a suspension.
+ * S-11 measured chrome.storage.local.get inside the injected frame at 1ms and
+ * PiP still opened. That is the whole reason the read below is allowed to be
+ * here and not in background.ts.
+ *
+ * These use this file's own `video()` builder rather than content.test.ts's
+ * `makeScorableVideo`: the two produce the same scorable element, and a second
+ * copy here would be one more thing to keep in step for no gain. Only one video
+ * is on the page in each case, so nothing about the scoring formula is in play.
+ * ==========================================================================*/
+describe("pipEntry — prefs plumbing", () => {
+  const FREE: PipPrefs = {
+    tier: "free",
+    enhancedWindow: true, // ON, and still native: the tier is what gates it.
+    windowSize: "medium",
+    rememberSizePerSite: true,
+    inWindowControls: true,
+    subtitles: false,
+    geometry: {},
+  };
+
+  let requested: ReturnType<typeof vi.fn>;
+
+  beforeEach(() => {
+    // happy-dom implements no requestPictureInPicture at all, so without this
+    // every case below would take the synchronous-TypeError branch and prove
+    // nothing about whether PiP was actually asked for.
+    requested = vi.fn(() => Promise.resolve());
+    Object.defineProperty(HTMLVideoElement.prototype, "requestPictureInPicture", {
+      value: requested,
+      configurable: true,
+      writable: true,
+    });
+  });
+
+  // Both stubs live on shared objects. Leaving either in place would change the
+  // environment for every test that runs after this file's block.
+  afterEach(() => {
+    delete (HTMLVideoElement.prototype as unknown as Record<string, unknown>)
+      .requestPictureInPicture;
+    delete (window as unknown as Record<string, unknown>).chrome;
+    delete (window as unknown as Record<string, unknown>).documentPictureInPicture;
+  });
+
+  /** happy-dom has no Document PiP, so `supported` reads false unless a test
+   *  puts one here. Several cases below would otherwise route native for the
+   *  WRONG reason and pass while proving nothing. */
+  function stubDocumentPip() {
+    (window as unknown as Record<string, unknown>).documentPictureInPicture = {
+      requestWindow: () => Promise.resolve({}),
+    };
+  }
+
+  /** The cold path's only I/O, stubbed at the shape entry.ts actually calls. */
+  function stubStorage(get: (keys: string[]) => Promise<Record<string, unknown>>) {
+    const spy = vi.fn(get);
+    (window as unknown as Record<string, unknown>).chrome = { storage: { local: { get: spy } } };
+    return spy;
+  }
+
+  it("routes to native when prefs say free, and reports the mode it chose", async () => {
+    const v = video({ label: "v" });
+
+    const result = pipEntry({ prefs: FREE });
+    // BEFORE awaiting anything: the warm path may not suspend above the call,
+    // which is the structural guarantee the free tier has always had.
+    expect(v.requestPictureInPicture).toHaveBeenCalled();
+
+    const r = await result;
+    expect(r.mode).toBe("native");
+    expect(r.outcome).toBe("PIP_OK");
+  });
+
+  it("reads no storage at all when the worker's cache answered", async () => {
+    video({ label: "v" });
+    const get = stubStorage(async () => ({}));
+
+    await pipEntry({ prefs: FREE });
+    expect(get).not.toHaveBeenCalled();
+  });
+
+  it("routes to native when prefs are ABSENT and no storage is reachable", async () => {
+    // The cold-worker path with the fallback unavailable — happy-dom has no
+    // chrome.storage unless a test puts one there. A floating window beats an
+    // error, so this must still act, and it must do so WITHOUT suspending:
+    // there is nothing to wait for.
+    const v = video({ label: "v" });
+
+    const result = pipEntry({ prefs: null });
+    expect(v.requestPictureInPicture).toHaveBeenCalled();
+
+    const r = await result;
+    expect(r.mode).toBe("native");
+    expect(r.outcome).toBe("PIP_OK");
+  });
+
+  it("reads prefs from the page when the worker was cold, and still goes native", async () => {
+    video({ label: "v" });
+    const get = stubStorage(async () => ({
+      settings: { enhancedWindow: true },
+      entitlement_cache: { tier: "pro" },
+      geometry: {},
+    }));
+
+    // Pro AND enhancedWindow, but Document PiP is NOT stubbed here, so the
+    // third condition fails and the route is native for a reason the routing
+    // function actually decided rather than because nothing was wired up.
+    const r = await pipEntry({ prefs: null });
+    expect(get).toHaveBeenCalledWith(["settings", "entitlement_cache", "geometry"]);
+    expect(r.mode).toBe("native");
+    expect(r.outcome).toBe("PIP_OK");
+  });
+
+  it("carries a `document` decision without acting on it — INTERIM, by design", () => {
+    // THE POINT OF THIS TASK, stated as an assertion. All three conditions are
+    // true, so the decision is `document` and it survives the trip into the
+    // injected body. NOTHING acts on it yet: the native window still opens, and
+    // that is why a regression in the next task — the one that adds the second
+    // branch — is attributable to that task and not to this plumbing.
+    //
+    // This test is expected to CHANGE when the enhanced window lands. Its job
+    // until then is to stop the mismatch from being silent: for one commit,
+    // `mode: "document"` describes the route taken, not the window opened.
+    stubDocumentPip();
+    const v = video({ label: "v" });
+
+    const result = pipEntry({
+      prefs: { ...FREE, tier: "pro", enhancedWindow: true },
+    });
+
+    expect(v.requestPictureInPicture).toHaveBeenCalled(); // the NATIVE call
+    expect(requested).toHaveBeenCalledTimes(1);
+    return (result as Promise<{ mode?: string; outcome?: string }>).then((r) => {
+      expect(r.mode).toBe("document");
+      expect(r.outcome).toBe("PIP_OK");
+    });
+  });
+
+  it("still routes a PRO user native when the enhanced window is switched OFF", () => {
+    // The setting is the second gate and it is independent of the tier.
+    stubDocumentPip();
+    video({ label: "v" });
+    const result = pipEntry({ prefs: { ...FREE, tier: "pro", enhancedWindow: false } });
+    return (result as Promise<{ mode?: string }>).then((r) => expect(r.mode).toBe("native"));
+  });
+
+  it("falls through to native when the page-side storage read REJECTS", async () => {
+    video({ label: "v" });
+    stubStorage(() => Promise.reject(new Error("storage is gone")));
+
+    const r = await pipEntry({ prefs: null });
+    expect(r.mode).toBe("native");
+    expect(r.outcome).toBe("PIP_OK");
+  });
+
+  it("keeps the dryRun path synchronous and non-thenable", () => {
+    video({ label: "v" });
+    // `prefs: null` is the case that would send a non-dryRun call to storage.
+    // The dryRun return has to happen ABOVE that, or content.ts's localScore()
+    // lift of window.__pipCoord becomes a real race in every frame.
+    const result = pipEntry({ dryRun: true, prefs: null });
+    expect(typeof (result as { then?: unknown }).then).not.toBe("function");
+    // No implementation ran, so there is no mode to report.
+    expect(result.mode).toBeUndefined();
+    expect(requested).not.toHaveBeenCalled();
   });
 });

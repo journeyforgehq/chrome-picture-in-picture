@@ -56,16 +56,23 @@
  * ==========================================================================*/
 
 import type { PipPrefs } from "./prefs";
+import type { PipMode } from "./router";
 
 export interface PipEntryOptions {
   dryRun?: boolean;
   /** The worker's prefs cache, passed through executeScript's `args`. `null`
-   *  means the worker was cold and did not know — NOT "free". Declared here so
-   *  the worker's call site typechecks; NOTHING in this file reads it yet. The
-   *  routing that consumes it lands in a later task.
+   *  means the worker was cold and did not know — NOT "free". When it is null
+   *  this function reads storage ITSELF, which is safe HERE and nowhere else:
+   *  the page's transient activation is time-based (~5s) and survives a
+   *  suspension, while the worker's gesture scope is turn-based and does not.
+   *  S-11 measured the read at 1ms inside the injected frame.
    *
    *  `import type` only: it is erased before Function.prototype.toString() ever
-   *  sees this source, so rule 1 above ("no outside identifiers") still holds. */
+   *  sees this source, so rule 1 above ("no outside identifiers") still holds.
+   *  A RUNTIME import from ./prefs would be a bug of a different order — it
+   *  drags ./state into the content chunk, and state.ts touches
+   *  storage.session, which is closed to content scripts (S-07). That is also
+   *  why PREFS_KEYS is spelled out as literals below instead of imported. */
   prefs?: PipPrefs | null;
 }
 
@@ -91,6 +98,9 @@ export interface PipEntryResult {
   reason?: PipEntryReason;
   outcome?: "PIP_OK" | "PIP_EXITED" | "THREW";
   errorName?: string;
+  /** Which implementation actually ran. Absent on dryRun and on every branch
+   *  that returns before a PiP call, because nothing ran to report. */
+  mode?: PipMode;
 }
 
 /**
@@ -324,47 +334,114 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
     return { frame, acted: true, winner: best.candidate, candidates: candidates };
   }
 
-  // ONE shape for BOTH failure modes. PiP can fail two ways — a synchronous
-  // throw, and a promise rejection — and the two used to be reported
-  // differently (the rejection was not reported at all). Building the result in
-  // one place is what keeps them from drifting apart again.
-  //
-  // Not `instanceof Error`: the failure can cross a realm boundary, where the
-  // page's Error is a different constructor than ours.
-  const failed = function (err: { name?: string } | null | undefined): PipEntryResult {
-    return {
+  // Routing decision, inlined. router.ts holds the same logic as the single
+  // testable source of truth; this copy exists because the injected body may
+  // not reference anything outside itself (rule 1). A later task adds a test
+  // that pins the two implementations to the same truth table, so they cannot
+  // drift.
+  const routeTo = function (p: PipPrefs | null, supported: boolean): PipMode {
+    if (!p || p.tier !== "pro") return "native";
+    if (!p.enhancedWindow) return "native";
+    if (!supported) return "native";
+    return "document";
+  };
+
+  // Everything that actually opens a window. `_p` is the prefs the enhanced
+  // window will be built from; the native branch has no use for them, and the
+  // native branch is still the only branch there is.
+  const actNow = function (
+    mode: PipMode,
+    _p: PipPrefs | null
+  ): PipEntryResult | Promise<PipEntryResult> {
+    // ONE shape for BOTH failure modes. PiP can fail two ways — a synchronous
+    // throw, and a promise rejection — and the two used to be reported
+    // differently (the rejection was not reported at all). Building the result
+    // in one place is what keeps them from drifting apart again.
+    //
+    // Not `instanceof Error`: the failure can cross a realm boundary, where the
+    // page's Error is a different constructor than ours.
+    const failed = function (err: { name?: string } | null | undefined): PipEntryResult {
+      return {
+        frame,
+        acted: true,
+        winner: best.candidate,
+        candidates: candidates,
+        mode: mode,
+        outcome: "THREW",
+        errorName: (err && err.name) || "Error",
+      };
+    };
+    const entered: PipEntryResult = {
       frame,
       acted: true,
       winner: best.candidate,
       candidates: candidates,
-      outcome: "THREW",
-      errorName: (err && err.name) || "Error",
+      mode: mode,
+      outcome: "PIP_OK",
     };
-  };
-  const entered: PipEntryResult = {
-    frame,
-    acted: true,
-    winner: best.candidate,
-    candidates: candidates,
-    outcome: "PIP_OK",
-  };
 
-  // NOTHING may suspend above this line — see rule 2 in the header block.
-  // (The two declarations above are plain assignments; they cannot suspend.)
-  try {
-    const entering = best.el.requestPictureInPicture();
+    // NOTHING may suspend above this line — see rule 2 in the header block.
+    // (The two declarations above are plain assignments; they cannot suspend.)
+    try {
+      const entering = best.el.requestPictureInPicture();
 
-    // The activation was already spent by the call above, so observing the
-    // result costs nothing — and NOT observing it is what made the failure
-    // toasts unreachable. `.then`, never async/await: see rule 2. Guarded
-    // rather than assumed: a stub or an older engine may return undefined.
-    if (entering && typeof entering.then === "function") {
-      return entering.then(function () {
-        return entered;
-      }, failed);
+      // The activation was already spent by the call above, so observing the
+      // result costs nothing — and NOT observing it is what made the failure
+      // toasts unreachable. `.then`, never async/await: see rule 2. Guarded
+      // rather than assumed: a stub or an older engine may return undefined.
+      if (entering && typeof entering.then === "function") {
+        return entering.then(function () {
+          return entered;
+        }, failed);
+      }
+      return entered;
+    } catch (err) {
+      return failed(err as { name?: string } | null | undefined);
     }
-    return entered;
-  } catch (err) {
-    return failed(err as { name?: string } | null | undefined);
+  };
+
+  const supported = typeof (window as any).documentPictureInPicture === "object";
+
+  // WARM PATH — the worker's cache answered, so nothing suspends and the free
+  // path keeps the structural guarantee it has always had: the PiP call happens
+  // in the same turn as the click.
+  if (options.prefs !== null && options.prefs !== undefined) {
+    return actNow(routeTo(options.prefs, supported), options.prefs);
   }
+
+  // COLD PATH — the worker had no cache (it had just started). Read storage in
+  // the PAGE, where a suspension is survivable: the page's activation is
+  // time-based (~5s), and S-11 measured this read at 1ms. If chrome.storage is
+  // unreachable at all — no extension APIs in this world — fall through to
+  // native rather than failing: a floating window beats an error.
+  //
+  // The keys are literals ON PURPOSE. prefs.ts exports PREFS_KEYS with exactly
+  // this content, and importing it would (a) break rule 1 and (b) drag
+  // state.ts, which touches storage.session, into the content chunk.
+  const store = (window as any).chrome && (window as any).chrome.storage;
+  if (!store || !store.local) return actNow("native", null);
+  return store.local.get(["settings", "entitlement_cache", "geometry"]).then(
+    function (s: Record<string, any>) {
+      // Every field is absent on a fresh install and each one is untrusted
+      // input, so each gets its own fallback rather than assuming the record is
+      // well formed. Kept deliberately in step with prefsFromStored/prefsFrom
+      // in prefs.ts, including "unknown tier is free" — guessing pro would give
+      // the paid window away to every install whose cache had not been written.
+      const settings = s.settings || {};
+      const cache = s.entitlement_cache || null;
+      const p: PipPrefs = {
+        tier: cache && cache.tier === "pro" ? "pro" : "free",
+        enhancedWindow: settings.enhancedWindow === true,
+        windowSize: settings.windowSize || "medium",
+        rememberSizePerSite: settings.rememberSizePerSite !== false,
+        inWindowControls: settings.inWindowControls !== false,
+        subtitles: settings.subtitles === true,
+        geometry: s.geometry || {},
+      };
+      return actNow(routeTo(p, supported), p);
+    },
+    function () {
+      return actNow("native", null);
+    }
+  );
 }
