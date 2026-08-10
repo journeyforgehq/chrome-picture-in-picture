@@ -21,8 +21,24 @@ repeated here.
 | Commit | `0f3b7f5f040b610eaddbe5d5762eafc5194a831b` on `feat/v2-pro` ("docs: capability inventory of the surfaces the Pro tier modifies") |
 | Source | `extension/preview/gallery.tsx`, built with `npm run preview:build`, served by `npm run preview:serve` on `http://localhost:4173` |
 | Engine | Playwright Chromium (headless), default `deviceScaleFactor`, `fullPage: true` |
-| Desktop | viewport 1280×800 → full page **1288×5786** → `options-desktop.png` |
-| Mobile | viewport 375×667 → full page **383×7036** → `options-mobile.png` |
+
+There are **two pairs of PNGs** in this directory, both full captures of
+`http://localhost:4173/` (the gallery root — see the deviation note below).
+They differ only in whether the `UpgradePaywall` modal, which the gallery
+opens by default, was dismissed before the screenshot:
+
+| Pair | Desktop | Mobile | Modal | **Use for** |
+|---|---|---|---|---|
+| **Comparison baseline** | `options-desktop.png` (1280×5786) | `options-mobile.png` (375×7036) | **closed** | **Task 14's screenshot comparison.** This is the pair the plan's Task 14 step means by "`docs/superpowers/plans/baseline-pro/options-*.png`" — unobstructed, so the comparison actually sees the whole page. |
+| **As-loaded record** | `options-desktop-paywall-open.png` (1288×5786) | `options-mobile-paywall-open.png` (383×7036) | **open** (default gallery state) | Context only — shows the gallery exactly as it renders with no interaction, including the `UpgradePaywall` card itself mid-scrim. Do not diff Task 14's new screenshots against this pair; the scrim will make every comparison look wrong regardless of what changed underneath it. |
+
+**Why both exist:** plan 1 was burned by this exact modal once already — a
+toast screenshot passed every `toHaveCSS` assertion (computed style is
+unaffected by an overlay) while the mask silently covered the subject, and a
+human catch was the only thing that found it. Task 14 diffs pixels, so an
+obscured baseline would make that diff partly blind. The as-loaded pair is
+kept, not deleted, because it is still a truthful record of the gallery's
+actual default state and the first captures taken.
 
 ### Deviation from the plan's literal Step-1 script, and why
 
@@ -39,29 +55,41 @@ which screenshotted the same gallery root for the same reason. Both PNGs in
 this directory are therefore full captures of `http://localhost:4173/`
 (the gallery), not of an isolated options page.
 
-### Reading the PNGs: the paywall modal is open by default
+### Reading the PNGs: the paywall modal, and how it was handled
 
-Exactly as in the plan-1 baseline, `gallery.tsx` opens the `UpgradePaywall`
-modal on load. Both committed screenshots show it over a dimmed scrim, and the
-scrim occludes the top of the page: the `ui-kit preview gallery` heading,
-`TierBadge`, most of `PlanBadge`, and the top of `PaymentNudge`. Everything
-below that (starting around `LockedFeature`) is unoccluded. The sections
-describing occluded content below were taken from a supplementary capture with
-the modal dismissed (`.ant-modal-close` click, wait for `.ant-modal-mask`
-hidden) — same technique as the plan-1 baseline — not from the committed PNGs.
+`gallery.tsx` opens the `UpgradePaywall` modal on load. The `-paywall-open`
+pair shows it over a dimmed scrim, which occludes the top of the page: the
+`ui-kit preview gallery` heading, `TierBadge`, most of `PlanBadge`, and the
+top of `PaymentNudge`. Everything below that (starting around `LockedFeature`)
+is unoccluded even in that pair.
 
-### The 8px scrollWidth overflow is the open modal, not a layout bug
+The plain `options-desktop.png` / `options-mobile.png` pair was captured after
+dismissing the modal through its own UI — `.ant-modal-close` click, then wait
+for `.ant-modal-mask` to be `hidden` — which is the identical technique
+`extension/e2e/toast-visual.spec.ts` and `extension/e2e/options-visual.spec.ts`
+already use to solve this same problem (see `toast-visual.spec.ts`'s comment:
+"the first run of this spec produced a 'passing' screenshot of a white modal
+panel"). I looked at the result with the Read tool: the heading, `TierBadge`
+("Free" neutral / "Pro" green), the three `PlanBadge` rows (green "Active"
+tags), and the `PaymentNudge` yellow alert are all fully visible and legible
+at full contrast on both viewports — confirmed, not assumed. This dismissed
+pair is what every structural description below (gallery section order, the
+four `OptionsView` cards, layout/sizing, mobile reflow) was written against,
+and it is the pair Task 14 must diff.
 
-`documentElement.scrollWidth` in the committed captures is **1288** at a 1280
-viewport (desktop) and **383** at a 375 viewport (mobile) — 8px over in both.
-Measured directly: closing the modal (`.ant-modal-close`) and re-reading
-`scrollWidth` gives exactly **1280** and **375** — no overflow. The 8px is
-antd's `Modal` scroll-lock body-padding compensation (it pads `<body>` to
-offset the scrollbar it hides while open) in this headless Chromium instance,
-present only while the modal is open. `e2e/options-visual.spec.ts` already
-knows this and explicitly closes the modal before asserting `scrollWidth`
-(see its "Trap 3" comment) — its assertion passed at exactly 1280/375. Do not
-read the 8px in these PNGs as a regression signal.
+### The 8px scrollWidth overflow only appears with the modal open
+
+`documentElement.scrollWidth` in the `-paywall-open` captures is **1288** at a
+1280 viewport (desktop) and **383** at a 375 viewport (mobile) — 8px over in
+both. In the dismissed-modal pair used for comparison, `scrollWidth` is
+exactly **1280** and **375** — no overflow, measured directly at capture time.
+The 8px is antd's `Modal` scroll-lock body-padding compensation (it pads
+`<body>` to offset the scrollbar it hides while open) in this headless
+Chromium instance, present only while the modal is open. `e2e/options-visual.spec.ts`
+already knows this and explicitly closes the modal before asserting
+`scrollWidth` (see its "Trap 3" comment) — its assertion passed at exactly
+1280/375. Do not read the 8px in the `-paywall-open` pair as a regression
+signal, and do not expect to see it in the comparison pair at all.
 
 ## Gallery section order
 
@@ -156,8 +184,9 @@ the CSS at `extension/src/options/OptionsView.tsx` (`@media (max-width:
   from the row's top-right to its own line below the help text.
 - The "Restore purchase" email input and button stack vertically instead of
   sharing a row.
-- With the modal **closed**, there is no horizontal overflow: `scrollWidth ===
-  375`. (See the scrollWidth note above for why the raw PNG shows 383.)
+- There is no horizontal overflow in the comparison pair: `scrollWidth ===
+  375`. (See the scrollWidth note above for why the `-paywall-open` pair
+  shows 383 instead.)
 
 ## Free-path behavioral baseline — test counts
 
@@ -186,8 +215,14 @@ included in this commit.
 
 ## Files in this directory
 
-- `options-desktop.png` — full-page capture, 1280×800 viewport, modal open.
-- `options-mobile.png` — full-page capture, 375×667 viewport, modal open.
+- `options-desktop.png` — full-page capture, 1280×800 viewport, **modal
+  dismissed**. **The Task 14 comparison baseline.**
+- `options-mobile.png` — full-page capture, 375×667 viewport, **modal
+  dismissed**. **The Task 14 comparison baseline.**
+- `options-desktop-paywall-open.png` — full-page capture, 1280×800 viewport,
+  modal open (gallery's default on-load state). Context only, see above.
+- `options-mobile-paywall-open.png` — full-page capture, 375×667 viewport,
+  modal open. Context only, see above.
 - `verify-test.txt` — full `npm test` (vitest) output at this commit.
 - `test-inventory.txt` — sorted file list of `extension/e2e/` +
   `extension/test/` at this commit.
