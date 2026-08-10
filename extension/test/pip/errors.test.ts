@@ -10,13 +10,14 @@ describe("pip error catalogue", () => {
     }
   });
 
-  it("carries the six states the free product can reach", () => {
+  it("carries the seven states the free product can reach", () => {
     expect(PIP_ERROR_CODES).toEqual([
       "NO_VIDEO",
       "NOT_READY",
       "SITE_DISABLED",
       "IFRAME_BLOCKED",
       "PIP_UNAVAILABLE",
+      "PIP_REFUSED",
       "RESTRICTED_URL",
     ]);
   });
@@ -35,6 +36,26 @@ describe("pip error catalogue", () => {
     expect(messageFor("PIP_UNAVAILABLE")).toBe(
       "Picture-in-picture is turned off in this browser."
     );
+    expect(messageFor("PIP_REFUSED")).toBe(
+      "Couldn't open the floating window. Click the icon and try again."
+    );
+    expect(messageFor("RESTRICTED_URL")).toBe("Chrome blocks extensions on this page.");
+  });
+
+  /* PIP_REFUSED exists because PIP_UNAVAILABLE's copy makes a CLAIM ABOUT THE
+   * BROWSER that is false on the path that used to reach it. entry.ts returns
+   * the `pip-unavailable` reason before it calls the API, so a NotAllowedError
+   * from the call proves picture-in-picture was enabled. These two assertions
+   * pin the difference in the copy itself, so a future edit cannot quietly
+   * collapse them back into one message. */
+  it("keeps PIP_REFUSED free of the browser claim PIP_UNAVAILABLE makes", () => {
+    expect(messageFor("PIP_UNAVAILABLE")).toMatch(/turned off in this browser/);
+    expect(messageFor("PIP_REFUSED")).not.toMatch(/turned off/i);
+    expect(messageFor("PIP_REFUSED")).not.toMatch(/browser/i);
+  });
+
+  it("gives PIP_REFUSED a next step the user can actually take", () => {
+    expect(messageFor("PIP_REFUSED")).toMatch(/try again/i);
   });
 
   // No injection is possible on chrome:// or the Web Store, so there is
@@ -49,5 +70,6 @@ describe("pip error catalogue", () => {
     expect(severityFor("SITE_DISABLED")).toBe("blocked");
     expect(severityFor("IFRAME_BLOCKED")).toBe("blocked");
     expect(severityFor("PIP_UNAVAILABLE")).toBe("blocked");
+    expect(severityFor("PIP_REFUSED")).toBe("blocked");
   });
 });

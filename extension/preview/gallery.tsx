@@ -196,7 +196,12 @@ function Gallery() {
           ))}
         </Space>
 
-        <Divider orientation="left">Toast — all six states</Divider>
+        {/* Driven off PIP_ERROR_CODES itself, so a new code gets a rendered
+            card automatically rather than by somebody remembering to add one.
+            RESTRICTED_URL has no toast (severity "tooltip") and ToastCard
+            returns an empty card for it — deliberately, so the gallery still
+            names every code in the catalogue. */}
+        <Divider orientation="left">Toast — all seven states</Divider>
         <Space direction="vertical" size="large" style={{ width: "100%" }}>
           {PIP_ERROR_CODES.map((code) => (
             <ToastCard key={code} code={code} />

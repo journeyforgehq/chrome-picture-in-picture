@@ -6,6 +6,10 @@ import { test, expect } from "@playwright/test";
 const CASES = [
   { code: "NO_VIDEO", border: "rgb(22, 119, 255)" },
   { code: "SITE_DISABLED", border: "rgb(212, 136, 6)" },
+  // The seventh code. It is the toast a user sees when picture-in-picture is
+  // working and the request was merely refused, so it must actually RENDER —
+  // a code in the catalogue with no card is a state nobody ever looked at.
+  { code: "PIP_REFUSED", border: "rgb(212, 136, 6)" },
 ];
 
 for (const vp of [
@@ -34,6 +38,12 @@ for (const vp of [
     }
     await expect(page.locator('[data-testid="toast-NO_VIDEO"]')).toHaveScreenshot(
       `toast-no-video-${vp.name}.png`
+    );
+    // PIP_REFUSED's copy is two sentences and the toast is max-width:260px, so
+    // it is the one card in the catalogue whose text WRAPS. A screenshot is the
+    // only thing that shows whether it wraps into something readable.
+    await expect(page.locator('[data-testid="toast-PIP_REFUSED"]')).toHaveScreenshot(
+      `toast-pip-refused-${vp.name}.png`
     );
   });
 }

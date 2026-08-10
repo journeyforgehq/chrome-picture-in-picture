@@ -32,7 +32,12 @@ export function decideOutcome(results: PipEntryResult[]): ActionOutcome {
   if (actor) {
     if (actor.outcome === "PIP_OK" || actor.outcome === "PIP_EXITED") return { toast: null };
     if (actor.errorName === "SecurityError") return { toast: "IFRAME_BLOCKED" };
-    if (actor.errorName === "NotAllowedError") return { toast: "PIP_UNAVAILABLE" };
+    // NOT PIP_UNAVAILABLE. Reaching this line means entry.ts got past its
+    // `document.pictureInPictureEnabled` guard — that guard returns the
+    // `pip-unavailable` REASON below without ever calling the API — so
+    // picture-in-picture was enabled and the request was refused for another
+    // cause, almost always a spent user activation. See errors.ts.
+    if (actor.errorName === "NotAllowedError") return { toast: "PIP_REFUSED" };
     return { toast: "NO_VIDEO" };
   }
 

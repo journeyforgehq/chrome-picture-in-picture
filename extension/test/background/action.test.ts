@@ -39,7 +39,7 @@ describe("decideOutcome", () => {
     expect(out.toast).toBe("IFRAME_BLOCKED");
   });
 
-  it("maps pip-unavailable to its own message", () => {
+  it("maps the pip-unavailable REASON to PIP_UNAVAILABLE", () => {
     expect(decideOutcome([frame({ reason: "pip-unavailable" })]).toast).toBe("PIP_UNAVAILABLE");
   });
 
@@ -59,10 +59,45 @@ describe("decideOutcome", () => {
     expect(decideOutcome([]).toast).toBe("RESTRICTED_URL");
   });
 
-  it("maps a NotAllowedError to PIP_UNAVAILABLE", () => {
+  /* ==========================================================================
+   * THE TWO PATHS THAT USED TO SHARE ONE MESSAGE.
+   * ==========================================================================
+   * entry.ts checks document.pictureInPictureEnabled and returns the
+   * `pip-unavailable` REASON *before* it ever calls requestPictureInPicture().
+   * So a NotAllowedError OUTCOME can only come from a frame that got past that
+   * guard — picture-in-picture was enabled, and the request was refused for
+   * another cause (a spent user activation, in practice). Mapping it to
+   * PIP_UNAVAILABLE told users with working picture-in-picture that their
+   * browser had it switched off, and pointed them at nothing they could do.
+   * ========================================================================*/
+  it("maps a NotAllowedError OUTCOME to PIP_REFUSED, not PIP_UNAVAILABLE", () => {
     const out = decideOutcome([
       frame({ acted: true, outcome: "THREW", errorName: "NotAllowedError" }),
     ]);
-    expect(out.toast).toBe("PIP_UNAVAILABLE");
+    expect(out.toast).toBe("PIP_REFUSED");
+  });
+
+  it("keeps the two paths distinguishable: same click, two different toasts", () => {
+    // A frame that never reached the API because the capability is off.
+    const disabled = decideOutcome([frame({ reason: "pip-unavailable" })]);
+    // A frame that DID reach the API and had the request refused.
+    const refused = decideOutcome([
+      frame({ acted: true, outcome: "THREW", errorName: "NotAllowedError" }),
+    ]);
+
+    expect(disabled.toast).toBe("PIP_UNAVAILABLE");
+    expect(refused.toast).toBe("PIP_REFUSED");
+    expect(disabled.toast).not.toBe(refused.toast);
+  });
+
+  it("lets the acting frame's refusal beat a sibling's pip-unavailable reason", () => {
+    // The reason branch is only consulted when NOBODY acted, so an actor that
+    // was refused must not be relabelled by another frame's stale capability
+    // report.
+    const out = decideOutcome([
+      frame({ frame: "SUBFRAME", reason: "pip-unavailable" }),
+      frame({ acted: true, outcome: "THREW", errorName: "NotAllowedError" }),
+    ]);
+    expect(out.toast).toBe("PIP_REFUSED");
   });
 });

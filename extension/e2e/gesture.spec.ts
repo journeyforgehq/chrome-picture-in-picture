@@ -239,6 +239,21 @@ test("THE CONTROL — no gesture means NotAllowedError", async ({ page }) => {
       "  Until that is fixed this test proves nothing.\n"
   ).toEqual({ isActive: false, hasBeenActive: false });
 
+  // THE OTHER PRECONDITION, AND IT IS WHY PIP_REFUSED EXISTS. Picture-in-picture
+  // is ENABLED in this browser right now — so the NotAllowedError asserted below
+  // cannot mean "turned off in this browser". entry.ts returns the
+  // `pip-unavailable` reason from exactly this flag being false, before it ever
+  // calls the API, so the two conditions are mutually exclusive by
+  // construction. Measured here rather than argued: this single line is the
+  // empirical proof that mapping NotAllowedError to PIP_UNAVAILABLE was a lie.
+  const pipEnabled = await noGestureEval<boolean>(cdp, "document.pictureInPictureEnabled");
+  expect(
+    pipEnabled,
+    "\n  document.pictureInPictureEnabled is false in this browser, so the\n" +
+      "  NotAllowedError below could legitimately mean 'turned off'. This test\n" +
+      "  cannot distinguish the two paths under that condition.\n"
+  ).toBe(true);
+
   // Promise.resolve + awaitPromise, because pipEntry is thenable on this path:
   // JSON.stringify of the promise itself would be "{}" and every assertion
   // below would then be comparing against undefined.
@@ -255,7 +270,7 @@ test("THE CONTROL — no gesture means NotAllowedError", async ({ page }) => {
 
   // THE BROWSER REFUSED, AND pipEntry SAID SO. Reported by the function itself,
   // which is the whole point: background/action.ts turns exactly this
-  // errorName into the PIP_UNAVAILABLE toast, so a result that did not carry it
+  // errorName into the PIP_REFUSED toast, so a result that did not carry it
   // would mean the user got silence.
   //
   // Getting here required fixing entry.ts. MEASURED: a gesture-less

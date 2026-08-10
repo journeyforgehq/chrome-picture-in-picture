@@ -181,7 +181,7 @@ describe("pipEntry — a rejected requestPictureInPicture must be REPORTED", () 
   // This branch used to swallow that rejection and return PIP_OK, which made
   // BOTH error-name branches of background/action.ts's decideOutcome
   // unreachable in production — SecurityError -> IFRAME_BLOCKED and
-  // NotAllowedError -> PIP_UNAVAILABLE. The user clicked, no window opened, and
+  // NotAllowedError -> PIP_REFUSED. The user clicked, no window opened, and
   // the extension's only feedback channel said nothing. These tests are what
   // keep that fixed.
   function stubRequest(impl: () => Promise<void> | never): void {
@@ -211,7 +211,7 @@ describe("pipEntry — a rejected requestPictureInPicture must be REPORTED", () 
     expect(r.winner?.label).toBe("v");
   });
 
-  it("reports a NotAllowedError rejection as THREW — the PIP_UNAVAILABLE path", async () => {
+  it("reports a NotAllowedError rejection as THREW — the PIP_REFUSED path", async () => {
     video({ label: "v" });
     stubRequest(() => Promise.reject(new DOMException("x", "NotAllowedError")));
 

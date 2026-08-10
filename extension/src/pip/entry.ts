@@ -41,7 +41,7 @@
  *    rejects it with NotAllowedError, so a try/catch around the call sees
  *    nothing. This function used to swallow that with `.catch(() => {})` and
  *    return an optimistic PIP_OK, which made background/action.ts's
- *    SecurityError -> IFRAME_BLOCKED and NotAllowedError -> PIP_UNAVAILABLE
+ *    SecurityError -> IFRAME_BLOCKED and NotAllowedError -> PIP_REFUSED
  *    toasts UNREACHABLE: the user clicked, no window opened, and nothing was
  *    said. For a product whose only feedback channel is that toast, silence on
  *    failure is the worst possible outcome. Both failure shapes — synchronous
@@ -115,6 +115,10 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
     return { frame, acted: true, winner: null, candidates: [], outcome: "PIP_EXITED" };
   }
 
+  // The ONLY place `pip-unavailable` is produced, and it happens BEFORE any
+  // call to requestPictureInPicture(). That ordering is what lets action.ts
+  // treat a later NotAllowedError as PIP_REFUSED rather than "turned off":
+  // getting past this line proves picture-in-picture is enabled here.
   if (!document.pictureInPictureEnabled) {
     return { frame, acted: false, winner: null, candidates: [], reason: "pip-unavailable" };
   }
