@@ -55,8 +55,18 @@
  *    — the top frame acts and subframes stand down.
  * ==========================================================================*/
 
+import type { PipPrefs } from "./prefs";
+
 export interface PipEntryOptions {
   dryRun?: boolean;
+  /** The worker's prefs cache, passed through executeScript's `args`. `null`
+   *  means the worker was cold and did not know — NOT "free". Declared here so
+   *  the worker's call site typechecks; NOTHING in this file reads it yet. The
+   *  routing that consumes it lands in a later task.
+   *
+   *  `import type` only: it is erased before Function.prototype.toString() ever
+   *  sees this source, so rule 1 above ("no outside identifiers") still holds. */
+  prefs?: PipPrefs | null;
 }
 
 export interface PipCandidate {

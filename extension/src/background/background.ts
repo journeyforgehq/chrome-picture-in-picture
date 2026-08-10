@@ -7,7 +7,17 @@ import { pipEntry } from "../pip/entry";
 import type { PipEntryResult } from "../pip/entry";
 import { showToast } from "../pip/toast";
 import { messageFor, severityFor } from "../pip/errors";
-import { getSettings, setSettings, setActivePip, clearActivePip } from "../pip/state";
+import {
+  getSettings,
+  setSettings,
+  setActivePip,
+  clearActivePip,
+  DEFAULT_SETTINGS,
+  type PipSettings,
+} from "../pip/state";
+import { prefsFrom, PREFS_KEYS, type PipPrefs } from "../pip/prefs";
+import type { EntitlementCache } from "../billing/entitlement";
+import type { GeometryMap } from "../pip/geometry";
 import { ensureRegistered, ensureUnregistered } from "./registration";
 
 export interface InstalledDetails {
@@ -228,6 +238,37 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
     })();
   });
 
+  /* ==========================================================================
+   * THE PREFS CACHE — read synchronously by the click handler.
+   *
+   * §2.2 of the spec says no module-level variable is trusted across worker
+   * invocations, and that rule is respected here rather than broken: `null`
+   * means UNKNOWN, not "free". An unknown cache makes the injected function do
+   * its own storage read (S-11: 1ms, and the page's activation is time-based
+   * with a ~5s budget, so it is safe there in a way it is NOT safe here).
+   *
+   * Why not just always read page-side? Because the free/native path then
+   * depends on a timing budget instead of on a structural guarantee, on every
+   * click, for the ~99% of users who never buy Pro. This keeps that path
+   * synchronous whenever the worker is warm.
+   * ========================================================================*/
+  let cachedPrefs: PipPrefs | null = null;
+
+  async function refreshPrefs(): Promise<void> {
+    const stored = await chrome.storage.local.get([...PREFS_KEYS]);
+    cachedPrefs = prefsFrom(
+      { ...DEFAULT_SETTINGS, ...(stored.settings as Partial<PipSettings> | undefined) },
+      (stored.entitlement_cache as EntitlementCache | undefined) ?? null,
+      (stored.geometry as GeometryMap | undefined) ?? {}
+    );
+  }
+
+  void refreshPrefs();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (PREFS_KEYS.some((k) => k in changes)) void refreshPrefs();
+  });
+
   // ═══════════════════════════════════════════════════════════════════════════
   // INVARIANT 1 — executeScript MUST be the first statement here, with NO await
   // before it. Not "no expensive await" — NO AWAIT.
@@ -262,7 +303,7 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
     const injection = chrome.scripting.executeScript({
       target: { tabId, allFrames: true },
       func: pipEntry,
-      args: [{}],
+      args: [{ prefs: cachedPrefs }],
     });
 
     void (async () => {

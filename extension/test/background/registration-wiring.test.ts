@@ -105,6 +105,11 @@ function loadWorker(): Harness {
     },
     tabs: { create: noop, onRemoved: emitter(), sendMessage: async () => undefined },
     storage: {
+      // Present because the worker's prefs cache subscribes to it at startup.
+      // chrome.storage.onChanged always exists when the storage permission is
+      // granted, so the worker calls it unguarded and a stub that omitted it
+      // would throw here rather than in anyone's browser.
+      onChanged: emitter(),
       local: {
         get: async () => ({ settings: h.settings }),
         set: async (v: Record<string, unknown>) => {
