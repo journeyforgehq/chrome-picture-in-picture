@@ -20,11 +20,41 @@ branch `feat/v1-free`, and is pasted from that run's output.
 | Hermetic e2e | `npx playwright test` | `Running 12 tests using 1 worker` → **`4 skipped` · `8 passed (18.3s)`** |
 | Welcome page | `cd ../welcome-page && npm run typecheck && npm test && npm run build` | exit 0 · `# pass 3 / # fail 0` · Gatsby build completed |
 
-The **1 skipped unit test** is deliberate and standing:
+The **1 skipped unit test** was deliberate and standing:
 `test/options/options.test.tsx > options submission gates > ships no unresolved
-__ORG__ placeholder in the built options bundle`. It is `it.skip` rather than
-absent so it appears in every `npm test` run as a pending pre-submission item;
-the options footer still links to `github.com/__ORG__/picture-in-picture`.
+__ORG__ placeholder in the built options bundle`. It was `it.skip` rather than
+absent so it appeared in every `npm test` run as a pending pre-submission item.
+**Un-skipped and green 2026-08-10** — see §7 item 2. There are now **no skipped
+unit tests**.
+
+> **AMENDED 2026-08-10** by the pass that closed §7 items 2, 3, 13 and 15.
+> Every row above is superseded by this run, from the same repo and branch:
+>
+> | Suite | Result |
+> |---|---|
+> | Types (extension) | exit 0, no output |
+> | Types (e2e) | exit 0, no output |
+> | Unit | **`Test Files 42 passed (42)` · `Tests 302 passed (302)`** — was 291 + 1 skipped |
+> | Build | `webpack 5.108.1 compiled with 3 warnings` — same three asset-size advisories, no errors |
+> | Fixtures | **`46 passed (6.2s)`** — was 45; +1 is `b13-30s-ad-vs-content` |
+> | Visual | **`8 passed (18.7s)`** — unchanged |
+> | Hermetic e2e | **`4 skipped` · `8 passed (18.2s)`** — unchanged; the 4 are still the `PLAN 2:` fixmes |
+> | Welcome page | typecheck exit 0 · **`# pass 15 / # fail 0`** (was 3) · Gatsby build completed |
+> | Repo root | `node --test test/*.test.mjs` · `# pass 11 / # fail 0` |
+>
+> **Unit delta +10 test cases, 0 new files** — counted per file, not inferred:
+> `test/background/action.test.ts` 11 → **13**, `test/pip/errors.test.ts` 5 →
+> **7**, `test/pip/entry.test.ts` 23 → **29**. Passed rises by **11** rather
+> than 10 because the submission gate in `test/options/options.test.tsx`
+> (16 tests, unchanged in count) moved from skipped to passing.
+> **Welcome-page delta +12 tests, +2 files:**
+> `test/sample-video.test.mjs` (8) and `test/restore-affordance.test.mjs` (4).
+>
+> **CORE drift re-measured after this pass: still exactly the recorded three**
+> (`extension/e2e/billing.spec.ts`, `extension/e2e/harness/identity.ts`,
+> `extension/src/billing/plans.ts`), 44/47 unchanged. Nothing in this pass
+> touched a CORE file — the two new welcome-page components live in
+> `src/child-sections/`, deliberately not in the vendored `src/sections/`.
 
 The **4 skipped e2e tests** are the `PLAN 2:` fixmes parked when the popup's
 `LockedFeature` gating assertions lost their subject — one each in
@@ -262,31 +292,77 @@ Nothing below blocks the branch; all of it blocks a Chrome Web Store submission.
    the factory placeholder — and the test asserted only "a valid PNG of the
    right size", which a flat square satisfies perfectly. The test now asserts
    structure **and** that the file is too large to be a flat square.
-2. **`__ORG__` placeholder** in the options footer's "Read the source" link.
-   `test/options/options.test.tsx > options submission gates` is skipped and
-   waiting; un-skip it once the real repo exists.
-3. **`__EXT_ID__` placeholder** in `welcome-page/src/content.ts:155`
-   (`pro.restoreHref: "chrome-extension://__EXT_ID__/options.html"`). It must be
-   substituted with the real extension id once the store listing exists.
-   *Note:* this token was **not caught by preflight** — that guard matched only
+2. ~~**`__ORG__` placeholder** in the options footer's "Read the source"
+   link~~ — **CLOSED 2026-08-10.** Substituted with `journeyforgehq`; the
+   public repo will be `github.com/journeyforgehq/picture-in-picture`.
+   `test/options/options.test.tsx > options submission gates` is **un-skipped**
+   and green, which is why `npm test` now reports **0 skipped** rather than 1.
+   Verified it passes for the right reason rather than by existing: the token
+   was reintroduced into the source, the bundle rebuilt, and the gate went red
+   (`expected '/*! For license information…' not to contain '__ORG__'`), then
+   green again on revert. It also gained a second assertion — that the URL which
+   *replaced* the token is present — because a check for absence alone would
+   pass just as happily if the link had been deleted outright.
+3. ~~**`__EXT_ID__` placeholder** in `welcome-page/src/content.ts`~~ —
+   **CLOSED 2026-08-10, BY DELETION RATHER THAN SUBSTITUTION.** The entry above
+   was wrong about what this needed, and the correction matters more than the
+   closure:
+
+   **The real extension id would not have fixed it.** A hosted web page cannot
+   navigate to a `chrome-extension://` URL at all unless the target resource is
+   listed in `web_accessible_resources` with matching origins — and this
+   manifest deliberately has **none** (`src/static/manifest.json`,
+   `_comment_no_web_accessible_resources`: fewer exposed resources means less
+   extension-fingerprinting surface). Filling the id in produces a link that
+   *looks* finished and does nothing. Same class of bug as the dead
+   `chrome://extensions/shortcuts` anchor already fixed in the options page.
+
+   `WelcomeContent` **cannot express instructions-instead-of-a-link** —
+   `pro.restoreHref` is a required `string` and CORE `sections/ProTeaser.tsx`
+   renders it unconditionally as a button; both files are CORE. So the working
+   affordance is rendered from `pages/index.tsx` by child-owned
+   `ProTeaserWithRestoreNote`, which carries an itemised parity audit against
+   the CORE component: five capabilities kept identical, **one dropped** (the
+   dead restore button), one added (plain instructions to open Options from the
+   toolbar icon). `pro.ctaHref` was checked for the same defect and **does not
+   have it** — it is ordinary `https://`, navigable from a hosted page, and
+   works the moment the domain token is filled.
+
+   `welcome-page/test/restore-affordance.test.mjs` (4 tests) holds the line the
+   preflight token used to, and asks a better question than "is it resolved":
+   does this page ship a `chrome-extension://` link **at all**, in the source
+   and in every built HTML file, and did the replacement reach server-rendered
+   HTML.
+
+   *The 2026-08-09 note below still stands and is still the reason to care.*
+   The token was **not caught by preflight** — that guard matched only
    `REPLACE_WITH_*`, and the welcome-page rewrite introduced the
-   `__DOUBLE_UNDERSCORE__` spelling. **Fixed 2026-08-09:** the pattern now
-   matches both, and `__ORG__`, `__EXT_ID__` and `__DOMAIN__` are all caught.
-   A guard that silently stops matching is worse than no guard — the green run
-   reads as "no placeholders shipped" rather than "not looking".
+   double-underscore spelling. **Fixed 2026-08-09:** the pattern now matches
+   both. A guard that silently stops matching is worse than no guard.
+   **New trap found 2026-08-10, and written into `content.ts`:** preflight greps
+   that file **including its comments**, so explaining a resolved token by
+   naming it puts it straight back into the report — and a warning comment about
+   that, written in the token style, tripped it a second time. Comments there
+   now name placeholders in prose.
 4. ~~The welcome page still describes the template product~~ — **CLOSED.**
    Parity row 94 / finding 4 is stale: commit `9a43d02` rewrote the copy.
    Verified in this pass — `appName: "Picture in Picture"`, and the
    `permissions` list now carries a `scripting` entry.
-5. **Preflight is red on 8 items** — re-run `node scripts/preflight.mjs`
-   2026-08-09:
+5. **Preflight is red on 6 items** (was 8) — re-run `node scripts/preflight.mjs`
+   **2026-08-10**:
    `backend/wrangler.toml` × 3 unfilled KV ids
    (`REPLACE_WITH_KV_ID` / `_STAGING_` / `_PROD_`), `welcome-page/src/content.ts`
-   × 3 (`__ORG__`, `__EXT_ID__`, `__DOMAIN__`), `extension/.env`
+   × 1 (the domain token only), `extension/.env`
    `BACKEND_BASE_URL` empty (paywall + `/me` target localhost), and
    `extension/.env` `no STRIPE_ANNUAL_URL or STRIPE_LIFETIME_URL (checkout has
    no link)`. The lifetime rule fires as written and passes once the link is
    filled.
+
+   **8 → 6 is two genuine closures, not the guard going quiet.** The org token
+   was substituted (item 2) and the extension-id token was removed because
+   nothing could ever fill it usefully (item 3). The domain token stays, because
+   the domain is genuinely not chosen — that one is the guard working as
+   intended.
 
    **This entry said 5 until 2026-08-09, and the rise to 8 is the guard
    working, not a regression.** Nothing new broke: the three added lines are the
@@ -388,9 +464,113 @@ Nothing below blocks the branch; all of it blocks a Chrome Web Store submission.
     Dropping it would ship those libraries without the attribution their
     licences require, so it is allowlisted deliberately rather than suppressed.
     No source map and no `.env` reach the archive.
-11. **Restart survival of the dynamic content-script registration is
+13. ~~**`PIP_UNAVAILABLE` makes a claim that can be false**~~ — **CLOSED
+    2026-08-10.** `decideOutcome` mapped a `NotAllowedError` from
+    `requestPictureInPicture()` to `PIP_UNAVAILABLE`, whose copy reads
+    *"Picture-in-picture is turned off in this browser."* That claim cannot be
+    true on that path: `entry.ts` checks `document.pictureInPictureEnabled` and
+    returns the `pip-unavailable` **reason** *before* it ever calls the API, so
+    a `NotAllowedError` coming back from the call proves picture-in-picture was
+    **enabled** and the request was refused for another cause (a spent user
+    activation, in practice). It was also a dead end — the toggle it pointed at
+    lives in `chrome://flags`, which the message never named.
+
+    **Seventh code, `PIP_REFUSED`, severity `blocked`:**
+    *"Couldn't open the floating window. Click the icon and try again."*
+    `PIP_UNAVAILABLE` keeps the genuine `pictureInPictureEnabled === false`
+    case, still reachable through the `pip-unavailable` reason — `d03-permissions-policy`
+    exercises it.
+
+    Distinguishability proved at three layers: **unit** (`decideOutcome` gets
+    both inputs in one test and must produce two different toasts, plus a test
+    that an acting frame's refusal is not relabelled by a sibling's reason),
+    **copy** (`errors.test.ts` asserts `PIP_REFUSED` contains neither "turned
+    off" nor "browser", so the two messages cannot quietly recombine), and
+    **browser** (`gesture.spec.ts`'s no-gesture control now asserts
+    `document.pictureInPictureEnabled === true` immediately before the
+    `NotAllowedError` it already asserted — the empirical proof, in a real
+    Chromium, that the two conditions are mutually exclusive).
+
+    The gallery renders off `PIP_ERROR_CODES`, so the new code got a card
+    automatically; `toast-visual.spec.ts` asserts its computed border and
+    background inside the shadow root at both viewports and screenshots it — it
+    is the one message long enough to wrap. The two `options-free` baselines
+    moved by **one pixel of height** because the extra toast card shifts the
+    OptionsView card and re-rasterises its text; content is identical.
+14. **R-14 is only HALF closed** — see
+    `picture-in-picture-design/08-risks-and-spikes.md`. The **30-second cliff is
+    fixed**: the advert penalty now reads `duration < 65 && el.muted`, which
+    covers the 15/30/60s pre-roll lengths that are actually sold. New fixture
+    `b13-30s-ad-vs-content` was written to fail first and did — `ad 1791.35`
+    vs `content 1500`, the advert winning by 291 — and now reads
+    `content 1500` vs `ad 1391`, content by 109, exactly `b03`'s margin. The
+    golden score matrix regenerated **purely additively** (10 insertions, 0
+    deletions): no existing fixture's score moved and no winner flipped.
+
+    **What is still open is the E02 escalation, and it is the worse half:**
+    `score -= 400` is gated on `el.muted`, so an **unmuted** advert of any
+    length collects no penalty *and* keeps the `+200` unmuted bonus. On a
+    same-slot ad (the real Twitch/news shape, as opposed to E02's stacked one)
+    an unmuted pre-roll scores **identically** to the content and the winner
+    falls through to area and then **DOM insertion order** — which is not a
+    decision the formula is making. Option B (penalise a shorter video when a
+    longer one exists on the same page, regardless of muting) is **not
+    implemented** and fixture **E08 is not written**. R-14 severity dropped
+    high → medium; it is not resolved.
+
+    **Accepted cost, on record:** a genuinely short *muted* clip is now
+    penalised — a 45s muted clip takes the same −400 an advert takes.
+15. ~~**R-15 · the welcome page's sample video**~~ — **CLOSED 2026-08-10 by
+    Option B, not the recommended Option A.** A real, playable 12s `<video>`
+    (VP9 1280×720, silent Opus track, 136,637 B, poster + WebVTT captions,
+    regenerated by `welcome-page/scripts/make-sample-clip.sh`) now sits directly
+    under the pin nudge, so the first pop-out happens in the same viewport as
+    the "where did the icon go" instruction.
+
+    Rendered from `pages/index.tsx` via child-owned
+    `src/child-sections/SampleVideo.tsx`, because `WelcomeContent.tryNow` is
+    `{ label; href; note? }` and CORE `Hero` draws it as a button. **Option A —
+    an optional `tryNow.video` field bundled with `sourceUrl` — remains the
+    right long-term shape and is not withdrawn**; it was not taken because a
+    factory bump means re-verifying that every existing child still builds,
+    which is portfolio-wide work that must not ride along inside this build.
+    Stated cost of Option B: this section's copy lives in the component rather
+    than in `content.ts`.
+
+    **The self-test half is live and was measured in Chromium against the served
+    build**, not argued from source: `pipEntry({ dryRun: true })` returns
+    `acted: true` with exactly one candidate, which wins, at 1280×800 and
+    375×667. Unplayed element state from that run — `readyState` **4**,
+    `muted` **false**, `duration` **12.008**, intrinsic **1280×720**, rendered
+    **720×405** / **311×175**, one `captions` track, `controls` true,
+    `disablePictureInPicture` false. `readyState` reaches 4 without a play
+    because of `preload="auto"`; at `metadata` it stops at 1 and the extension
+    would answer *"This video hasn't loaded yet"* on our own welcome page.
+
+    **New R-14 coupling, now load-bearing:** the clip must never be muted —
+    a muted clip under 65s takes the advert penalty, so muting our own sample to
+    buy autoplay would make the detector score it as an advert.
+    `welcome-page/test/sample-video.test.mjs` (8 tests) pins every precondition
+    against the source *and* the built HTML, reading duration and pixel
+    dimensions out of the WebM's own EBML rather than from a comment
+    (cross-checked with `ffprobe`: 12.008s, 1280×720).
+
+    `tryNow.href` was `https://__DOMAIN__/sample-video`, a route that never
+    existed; it is now `#try-it`, an anchor to this section, pinned to the
+    section's id by test.
+16. **The welcome page's hero logo is still the PLACEHOLDER** — found while
+    verifying item 15, not previously recorded. `welcome-page/static/icon-128.png`
+    is **359 bytes**, a flat blue square; the extension ships the real artwork at
+    **1,449 bytes** (`extension/src/static/icons/icon-128.png`). §7 item 1's
+    closure covered the extension's icons only — the welcome page has its own
+    separate copy that was never updated, and `content.ts`'s
+    `logoSrc: "/icon-128.png"` resolves to it. Confirmed visually: the built page
+    renders a plain blue rectangle above the title. Item 1's own root-cause note
+    applies directly — the previous placeholder survived because the guard
+    asserted only "a valid PNG of the right size", which a flat square satisfies.
+17. **Restart survival of the dynamic content-script registration is
     UNVERIFIED** — see manual checklist row 19. Chrome treated every relaunch of
     an unpacked extension as a fresh install and `onStartup` never fired, so the
     spike could not settle it. `background.ts`'s re-assert is correct either way.
-12. **The whole manual sheet is unrun.** `MANUAL-CHECKLIST.md` was written in
+18. **The whole manual sheet is unrun.** `MANUAL-CHECKLIST.md` was written in
     this task; no row on it has been executed.
