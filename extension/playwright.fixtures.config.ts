@@ -23,15 +23,19 @@ import { defineConfig } from "@playwright/test";
 //                                   their own static pages from e2e/serve.ts
 //                                   (localhost:3000 + 127.0.0.1:3001, two
 //                                   origins so the iframe cases are genuinely
-//                                   cross-origin). Two specs qualify:
+//                                   cross-origin). Three specs qualify:
 //
-//                                     detection.spec.ts — ~40 fixtures scoring
+//                                     detection.spec.ts   — ~40 fixtures scoring
 //                                       via pipEntry({ dryRun: true }); no
 //                                       gesture, no PiP call.
-//                                     gesture.spec.ts   — the real
+//                                     gesture.spec.ts     — the real
 //                                       requestPictureInPicture() call under a
 //                                       real page.click(), plus a no-gesture
 //                                       control.
+//                                     dpip-visual.spec.ts — the OTHER real call,
+//                                       documentPictureInPicture.requestWindow(),
+//                                       and the computed style of the window it
+//                                       opens.
 //
 // gesture.spec.ts lives here rather than in a fourth config because it needs
 // the same two things detection needs and nothing else: these self-served
@@ -41,21 +45,34 @@ import { defineConfig } from "@playwright/test";
 // no-gesture control still gets its NotAllowedError. Add --headed to watch the
 // floating windows appear; nothing in either spec requires it.
 //
+// dpip-visual.spec.ts qualifies on exactly the same test — NAME THE EXTERNAL
+// DEPENDENCY IT NEEDS THAT THE OTHER TWO DO NOT BRING, and there isn't one. It
+// serves the same fixtures from the same e2e/serve.ts, wants the same autoplay
+// flag, and calls the same shipped pipEntry through the same addInitScript
+// round trip; the only difference is which branch of pipEntry it drives —
+// documentPictureInPicture.requestWindow() instead of
+// requestPictureInPicture() — and a browser API is not an external dependency.
+// It has ONE environmental requirement of its own, `viewport: null`, and that
+// is declared PER FILE with test.use() rather than here, so the requirement
+// travels with the spec that needs it and cannot be silently inherited (or
+// silently lost) by the other two. That is the same reasoning that keeps this
+// from becoming a fifth config: a per-file need gets a per-file declaration.
+//
 // Deliberately NO globalSetup and NO webServer. Neither spec needs the wrangler
 // worker or the preview gallery, and this is the suite that gets run hundreds
 // of times while fixtures are written — a wrangler dependency would make it
 // needlessly slow and fragile. Keep it that way.
 //
 // workers:1 + fullyParallel:false is also load-bearing here, not just tidiness:
-// both specs bind ports 3000/3001 in their own beforeAll, so they must never
-// run concurrently.
+// all three specs bind ports 3000/3001 in their own beforeAll, so they must
+// never run concurrently.
 //
 // The main config testIgnores both of these and the visual config's testMatch
 // never sees them, so no suite can silently start depending on another's
 // fixtures.
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "**/{detection,gesture}.spec.ts",
+  testMatch: "**/{detection,gesture,dpip-visual}.spec.ts",
   workers: 1,
   fullyParallel: false,
   timeout: 30_000,

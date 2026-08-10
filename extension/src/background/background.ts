@@ -5,6 +5,7 @@ import { pickWinner, recordScore, pruneFrame, dropTab, type TabScores } from "./
 import { PIP_COORD, PIP_SCORE_REPORT } from "../pip/messages";
 import { pipEntry } from "../pip/entry";
 import type { PipEntryResult } from "../pip/entry";
+import { enhanceWindow } from "../pip/enhance";
 import { showToast } from "../pip/toast";
 import { messageFor, severityFor } from "../pip/errors";
 import { getSettings, setSettings, setActivePip, clearActivePip } from "../pip/state";
@@ -322,6 +323,33 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
         });
       } else if (results.some((r) => r.outcome === "PIP_EXITED")) {
         await clearActivePip();
+      }
+
+      // The window is already open; nothing here needs the gesture, which is
+      // why it is a second injection rather than more code inside pipEntry.
+      // pipEntry opened it BLACK AND EMPTY — this is what puts the stylesheet
+      // and the page's <video> into it. INVARIANT 1 governs only the code ABOVE
+      // executeScript in the listener, and test/background/invariant.test.ts
+      // reads exactly that slice; everything here runs in the promise tail,
+      // long after the gesture was spent.
+      if (winnerFrame?.result?.mode === "document") {
+        if (!cachedPrefs) await refreshPrefs();
+        const prefs = cachedPrefs;
+        await chrome.scripting.executeScript({
+          target: { tabId, frameIds: [winnerFrame.frameId ?? 0] },
+          func: enhanceWindow,
+          // No `win` — a Window is not structured-cloneable and cannot cross
+          // this boundary. enhanceWindow reads window.__pipWin, which pipEntry
+          // stashed during the gesture turn.
+          args: [
+            {
+              opts: {
+                inWindowControls: prefs?.inWindowControls !== false,
+                subtitles: prefs?.subtitles === true,
+              },
+            },
+          ],
+        });
       }
 
       if (!toast) return;

@@ -1,0 +1,75 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>g05 — the enhanced (Document PiP) window, decorated</title>
+<body>
+<!--
+  THE PRO PATH'S FIXTURE. gesture-harness.html covers the FREE path — a real
+  requestPictureInPicture() under a real click. This one covers the other
+  branch: documentPictureInPicture.requestWindow(), which pipEntry takes only
+  when the prefs it is handed say tier "pro" AND enhancedWindow true.
+
+  Those prefs are spelled out as a literal below rather than imported, for the
+  same reason entry.ts spells out its storage keys: this page is plain HTML
+  served by e2e/serve.ts and there is no module here that could import them. The
+  shape must stay in step with PipPrefs in src/pip/prefs.ts.
+
+  windowSize "medium" is LOAD-BEARING, not a default picked for tidiness: it is
+  the 400x225 preset, and dpip-visual.spec.ts asserts the PiP window's INNER box
+  is exactly that. Change it here and that assertion is measuring a different
+  contract.
+
+  window.__pipEntry and window.__enhanceWindow are NOT defined here. The spec
+  injects both with addInitScript(`... = ${fn.toString()}`), which is the same
+  Function.prototype.toString() trip chrome.scripting.executeScript makes in
+  production — so this page exercises the shipped functions, never copies of
+  them that could drift.
+
+  Why the button, and why nothing else: requestWindow() needs transient user
+  activation and page.evaluate() does not carry any, so opening the window has
+  to happen inside a real page.click(). DECORATING it does not — in production
+  that is a SECOND executeScript from the worker's promise tail, long after the
+  gesture is spent — which is why the spec calls __enhanceWindow itself from
+  page.evaluate rather than this handler doing it.
+-->
+<button id="open">Open the enhanced window</button>
+<div id="stage"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+
+  const video = makeVideo({ label: "target", muted: false, duration: 600 });
+  document.getElementById("stage").append(video);
+
+  document.getElementById("open").addEventListener("click", () => {
+    // Recorded even on the failure paths: a spec that read an undefined
+    // __lastResult could not tell "the handler never ran" from "the handler ran
+    // and pipEntry returned nothing".
+    if (typeof window.__pipEntry !== "function") {
+      window.__lastResult = { harnessError: "window.__pipEntry was not injected" };
+      window.__lastSettled = true;
+      return;
+    }
+
+    window.__lastResult = undefined;
+    window.__lastSettled = false;
+
+    // CALLED SYNCHRONOUSLY. Nothing may suspend above this line — the
+    // activation is spent by the call, and requestWindow refuses without it.
+    const result = window.__pipEntry({
+      prefs: {
+        tier: "pro",
+        enhancedWindow: true,
+        windowSize: "medium",
+        rememberSizePerSite: true,
+        inWindowControls: true,
+        subtitles: false,
+        geometry: {},
+      },
+    });
+    Promise.resolve(result).then((value) => {
+      window.__lastResult = value;
+      window.__lastSettled = true;
+    });
+  });
+
+  ready();
+</script>
