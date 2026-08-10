@@ -197,7 +197,16 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
     score += el.muted ? 0 : 200;
     score += ratio * 500;
     score += Math.min(area / 200000, 1) * 300;
-    if (duration < 30 && el.muted) score -= 400;
+    // R-14. THE ONLY TERM THAT REJECTS ADVERTS — 65 seconds, not 30.
+    // 15s, 30s and 60s are the three pre-roll lengths that are actually sold,
+    // and at `< 30` the last two collected no penalty at all and then won on
+    // rendered area, because an ad unit is routinely larger than the content
+    // player it interrupts (measured on b13: ad 1791, content 1500). 65 clears
+    // 60s with margin for a slate or a duration that reports slightly long.
+    // ACCEPTED COST: a genuinely short MUTED clip is penalised. It is muted, so
+    // it is rarely what somebody wants floated, and every other term still
+    // favours a real video.
+    if (duration < 65 && el.muted) score -= 400;
 
     const label = el.dataset.label || el.id || "video-" + i;
     scored.push({

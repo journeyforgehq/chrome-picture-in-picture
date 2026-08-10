@@ -104,6 +104,15 @@ export const CASES: DetectionCase[] = [
   { id: "b10-unmuted-paused-vs-muted-playing", winner: "muted-playing" },
   { id: "b11-exactly-100", winner: "at-boundary" },
   { id: "b12-99px", winner: null, reason: "none-found" },
+  // R-14. b03's advert is 10s; this one is 30s — a length that is actually
+  // SOLD. The penalty term used to read `duration < 30`, so a 30s pre-roll sat
+  // exactly on the far side of it and collected nothing. MEASURED when this
+  // fixture was written, before the threshold moved: **ad 1791, content 1500 —
+  // the advert won by 291**. The threshold is now 65, which covers 15/30/60s
+  // pre-rolls, and the same page reads ad 1391 / content 1500. Keep BOTH rows:
+  // b03 pins the short case, b13 pins the boundary that was wrong, and any
+  // future threshold change has to answer to both.
+  { id: "b13-30s-ad-vs-content", winner: "content" },
 
   // --- Group C: visibility filters. What counts as "the user can see it". ---
   { id: "c01-display-none", winner: null, reason: "none-found" },

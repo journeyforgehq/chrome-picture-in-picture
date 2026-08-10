@@ -245,6 +245,16 @@
       }
     ],
     "b12-99px": [],
+    "b13-30s-ad-vs-content": [
+      {
+        "label": "content",
+        "score": 1500
+      },
+      {
+        "label": "ad",
+        "score": 1391
+      }
+    ],
     "c01-display-none": [],
     "c02-visibility-hidden": [],
     "c03-opacity-005": [],

@@ -41,6 +41,78 @@ describe("pipEntry — scoring", () => {
     expect(pipEntry({ dryRun: true }).winner?.label).toBe("content");
   });
 
+  /* ==========================================================================
+   * R-14 — the advert penalty's threshold. 65 seconds, and the number matters.
+   * ==========================================================================
+   * `if (duration < 65 && el.muted) score -= 400` is the ONLY term in the
+   * formula that rejects adverts. It used to read `< 30`, which meant the two
+   * most commonly sold pre-roll lengths — 30s and 60s — fell on the far side of
+   * it, collected no penalty at all, and then won on rendered area, because an
+   * ad unit is routinely larger than the content player it interrupts.
+   * Measured in a real browser on e2e/fixtures/b13-30s-ad-vs-content.html:
+   * ad 1791, content 1500 — the advert won by 291. It is now 1391 to 1500.
+   *
+   * These pin the boundary from both sides so a future "tidy up the magic
+   * number" edit has to argue with a red test rather than a comment.
+   *
+   * THEY ASSERT SCORES, NOT WINNERS, AND THAT IS DELIBERATE — it was measured,
+   * not preferred. happy-dom has no layout engine, so `video()` stubs
+   * getBoundingClientRect at the origin and every clip lands fully inside the
+   * viewport with the same intersection term. An "ad beats content" arrangement
+   * therefore has the unmuted content winning on ratio ALONE, and the whole
+   * block still passed with the threshold reverted to 30. Verified by doing
+   * exactly that. The WINNER-level proof needs real layout and lives one layer
+   * up, in e2e/fixtures/b13-30s-ad-vs-content.html, where the tall ad pushes the
+   * content player off-viewport and the ranking genuinely flips.
+   * ========================================================================*/
+  // Each pair is identical except for duration, so the gap IS the penalty.
+  // 15 / 30 / 60 are the three pre-roll lengths that are actually sold.
+  for (const seconds of [15, 30, 60]) {
+    it(`penalises a muted ${seconds}s pre-roll — a length that actually ships`, () => {
+      video({ label: "preroll", w: 640, h: 360, muted: true, duration: seconds });
+      video({ label: "reference", w: 640, h: 360, muted: true, duration: 600 });
+      const r = pipEntry({ dryRun: true });
+      const score = (label: string) => r.candidates.find((c) => c.label === label)!.score;
+      expect(score("reference") - score("preroll")).toBe(400);
+    });
+  }
+
+  it("applies the penalty at 64s and not at 65s — exactly 400 points apart", () => {
+    // Identical in every other term, so the whole gap IS the penalty.
+    video({ label: "just-under", w: 640, h: 360, muted: true, duration: 64 });
+    video({ label: "at-threshold", w: 640, h: 360, muted: true, duration: 65 });
+    const r = pipEntry({ dryRun: true });
+    const score = (label: string) => r.candidates.find((c) => c.label === label)!.score;
+    expect(r.winner?.label).toBe("at-threshold");
+    expect(score("at-threshold") - score("just-under")).toBe(400);
+  });
+
+  it("leaves an UNMUTED short clip alone — the penalty needs both conditions", () => {
+    // The term is `duration < 65 && muted`. A short clip with sound is somebody
+    // watching something, not an advert, and must not be penalised for length.
+    video({ label: "short-unmuted", w: 640, h: 360, muted: false, duration: 20 });
+    video({ label: "short-muted", w: 640, h: 360, muted: true, duration: 20 });
+    const r = pipEntry({ dryRun: true });
+    const score = (label: string) => r.candidates.find((c) => c.label === label)!.score;
+    // +200 for being unmuted, +400 for not being penalised.
+    expect(score("short-unmuted") - score("short-muted")).toBe(600);
+  });
+
+  it("ACCEPTED COST: a genuine 45s muted clip is demoted too", () => {
+    // Recorded rather than hidden. Raising the threshold to 65 buys pre-roll
+    // rejection and charges for it here: a real, muted, 45-second clip takes
+    // the same 400 an advert takes, and at `< 30` it took nothing. Signed off —
+    // it is MUTED, so it is rarely what somebody wants floated, and it still
+    // beats anything paused (1000) or off-screen (up to 500).
+    video({ label: "genuine-45s", w: 640, h: 360, muted: true, duration: 45 });
+    video({ label: "reference", w: 640, h: 360, muted: true, duration: 600 });
+    const r = pipEntry({ dryRun: true });
+    const score = (label: string) => r.candidates.find((c) => c.label === label)!.score;
+    expect(score("reference") - score("genuine-45s")).toBe(400);
+    // Still beats a paused long video: the cost is a demotion, not exclusion.
+    expect(r.winner?.label).toBe("reference");
+  });
+
   it("keeps a live stream — duration Infinity must survive the >5s filter", () => {
     video({ label: "live", duration: Infinity });
     expect(pipEntry({ dryRun: true }).winner?.label).toBe("live");

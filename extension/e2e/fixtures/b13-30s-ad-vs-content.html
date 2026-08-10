@@ -1,0 +1,17 @@
+<!doctype html><meta charset="utf-8"><title>B13 — the 30s pre-roll</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // R-14. b03 proves a 10s advert loses. This one proves the case that ACTUALLY
+  // SHIPS: 30s and 60s are the two most commonly sold pre-roll lengths, and the
+  // advert penalty's threshold was `duration < 30` — so a 30s pre-roll fell
+  // exactly on the far side of it, collected no penalty at all, and won on
+  // rendered area, because ad units are routinely larger than the content
+  // player they interrupt.
+  //
+  // Same shape as b03, one number different. That is the point: the only thing
+  // separating "the extension rejects adverts" from "the extension pops out
+  // pre-rolls" was 20 seconds of duration nobody had a fixture for.
+  document.body.append(makeVideo({ label: "ad", width: 1280, height: 720, muted: true, duration: 30 }));
+  document.body.append(makeVideo({ label: "content", width: 640, height: 360, muted: false, duration: 600 }));
+  ready();
+</script>
