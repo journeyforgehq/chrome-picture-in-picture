@@ -189,6 +189,49 @@ describe("pipEntry — the enhanced window", () => {
     expect(requestWindow).toHaveBeenCalledWith({ width: 640, height: 360 });
   });
 
+  it("uses the remembered size when `rememberSizePerSite` is explicitly ON", async () => {
+    makeScorableVideo();
+    const win = fakePipWindow({ w: 640, h: 360 });
+    const requestWindow = vi.fn(async () => win);
+    (window as any).documentPictureInPicture = { requestWindow };
+
+    await pipEntry({
+      prefs: {
+        ...PRO,
+        rememberSizePerSite: true,
+        windowSize: "small",
+        geometry: { [location.origin]: { w: 640, h: 360 } },
+      },
+    });
+    // The stored size beats the `small` preset, which is what the flag is for.
+    expect(requestWindow).toHaveBeenCalledWith({ width: 640, height: 360 });
+  });
+
+  it("ignores a remembered size when `rememberSizePerSite` is OFF, without deleting it", async () => {
+    /* THE CASE THAT BREAKS IF ONLY THE WRITE SIDE CHECKS THE FLAG. The user
+     * turned "remember the size for each site" ON, resized a few sites, then
+     * turned it OFF. Those entries are still in storage. If this read kept
+     * preferring them, the setting would silently mean "stop recording new
+     * sizes" rather than "stop using per-site sizes", and the preset dropdown
+     * would appear dead on every site they had ever resized.
+     *
+     * And the entry must SURVIVE: turning the setting off is not a request to
+     * destroy the user's saved sizes, and turning it back on has to restore the
+     * old behaviour exactly. */
+    makeScorableVideo();
+    const win = fakePipWindow({ w: 320, h: 180 });
+    const requestWindow = vi.fn(async () => win);
+    (window as any).documentPictureInPicture = { requestWindow };
+
+    const geometry = { [location.origin]: { w: 640, h: 360 } };
+    await pipEntry({
+      prefs: { ...PRO, rememberSizePerSite: false, windowSize: "small", geometry },
+    });
+
+    expect(requestWindow).toHaveBeenCalledWith({ width: 320, height: 180 });
+    expect(geometry[location.origin]).toEqual({ w: 640, h: 360 });
+  });
+
   it("clamps a hand-edited or corrupt stored size instead of forwarding it", async () => {
     // geometry survives browser upgrades, screen changes and hand-editing; a 0x0
     // or NaN size reaches requestWindow otherwise. Same bounds as geometry.ts.

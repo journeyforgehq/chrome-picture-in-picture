@@ -436,7 +436,27 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
       medium: { w: 400, h: 225 },
       large: { w: 640, h: 360 },
     };
-    const stored = p.geometry ? p.geometry[location.origin] : undefined;
+    /* `rememberSizePerSite` is honoured on BOTH SIDES, and neither check is
+     * redundant with the other. DO NOT "SIMPLIFY" EITHER ONE AWAY.
+     *
+     * The write side (Task 12) checks it before PERSISTING a resize. If that
+     * were the only check, the setting would silently mean "stop recording new
+     * sizes" while the user asked for "stop using per-site sizes": entries
+     * written while it was ON stay in storage, and this read would keep
+     * preferring them forever. The user then picks a preset in the dropdown and
+     * it appears to do nothing on every site they had previously resized —
+     * which reads as a broken control, not a stale record.
+     *
+     * So the read side checks it too, and it does NOT delete the stored entry.
+     * Turning the setting off must not destroy the user's saved sizes; turning
+     * it back on restores the old behaviour exactly.
+     *
+     * `!== false`, matching the cold-path widening above and
+     * DEFAULT_SETTINGS.rememberSizePerSite === true: an ABSENT field means ON.
+     * A stale or hand-edited settings record must not silently disable a
+     * feature that defaults to enabled. */
+    const remembering = p.rememberSizePerSite !== false;
+    const stored = remembering && p.geometry ? p.geometry[location.origin] : undefined;
     const raw = stored || presets[p.windowSize] || presets.medium;
     const clamp = function (v: number, lo: number, hi: number): number {
       return !isFinite(v) || v < lo ? lo : v > hi ? hi : Math.round(v);
