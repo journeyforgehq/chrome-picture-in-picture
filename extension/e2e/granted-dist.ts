@@ -97,13 +97,25 @@ export interface GrantedExtension {
 /**
  * Launch Chrome with the granted build loaded, and open one extension page.
  *
- * THE EXTENSION PAGE IS THE INSTRUMENT, NOT THE SERVICE WORKER. Playwright
- * cannot instrument an MV3 service worker usefully: a spike measured
- * serviceWorker.evaluate() seeing a `chrome` object carrying only
- * { loadTimes, csi } — no extension bindings at all. options.html runs in an
- * extension context with the complete chrome.* surface, so every API call these
- * specs make goes through it. The worker's own state is read indirectly, from
- * the chrome.storage.session key it writes.
+ * THE EXTENSION PAGE IS THE INSTRUMENT, NOT THE SERVICE WORKER — but not for
+ * the reason first recorded here, which was wrong.
+ *
+ * The original note said serviceWorker.evaluate() sees a `chrome` object
+ * carrying only { loadTimes, csi }, i.e. no extension bindings ever. S-11
+ * measured that this is the PRE-BINDING WINDOW, not a property of the worker:
+ * poll for ~136ms after the 'serviceworker' event and the full surface appears
+ * (action, commands, permissions, runtime, scripting, storage, tabs, windows).
+ * A test that gives up in that window concludes "no bindings" and is wrong.
+ *
+ * The real reasons to keep options.html as the instrument:
+ *  - it is stable across worker termination, which MV3 does on ~30s idle; and
+ *  - Playwright's evaluate() sends CDP Runtime.evaluate with userGesture:true,
+ *    so anything driven through sw.evaluate() silently carries a user gesture.
+ *    S-11's first no-gesture control was invalidated by exactly this. Never
+ *    arrange the ABSENCE of a gesture with evaluate().
+ *
+ * The worker's own state is read indirectly, from the chrome.storage.session
+ * key it writes.
  */
 export async function launchGranted(): Promise<GrantedExtension> {
   const userDataDir = mkdtempSync(join(tmpdir(), "pip-granted-e2e-"));

@@ -230,9 +230,24 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
 
   // ═══════════════════════════════════════════════════════════════════════════
   // INVARIANT 1 — executeScript MUST be the first statement here, with NO await
-  // before it. Transient user activation does not survive an await in the service
-  // worker: a spike run failed because `await chrome.permissions.getAll()` sat on
-  // this line and the injected script arrived with hasBeenActive false.
+  // before it. Not "no expensive await" — NO AWAIT.
+  //
+  // S-03 found this the hard way: a run failed because `await
+  // chrome.permissions.getAll()` sat on this line and the injected script
+  // arrived with hasBeenActive false. That left the door open to reading the
+  // rule as "avoid slow calls". S-11 closed it by measuring the cheapest await
+  // there is: `await Promise.resolve()` — zero milliseconds, no IPC — and the
+  // injected frame still arrived with isActive false and threw NotAllowedError.
+  // chrome.storage.session.get() and chrome.storage.local.get() behave the same.
+  // The worker's gesture scope is TURN-based: it ends when this listener's
+  // synchronous run ends, and latency has nothing to do with it.
+  //
+  // The page's activation is a DIFFERENT mechanism — time-based, ~5s — so an
+  // await INSIDE the injected function is fine (S-11 experiment 2: storage.local,
+  // a sendMessage round trip and a 1s timer all still opened PiP; a 6s timer did
+  // not). Anything that needs to be looked up before the PiP call belongs there,
+  // not here.
+  //
   // DIAGNOSTICS AND PERSISTENCE GO AFTER, INSIDE THE .then().
   //
   // One call serves both permission modes: under activeTab this reaches the top
