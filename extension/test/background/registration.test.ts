@@ -11,6 +11,13 @@ import { SCRIPT_ID, ensureRegistered, ensureUnregistered } from "../../src/backg
  * A stub that resolved silently in either case would make the guard tests
  * below vacuous — they would pass whether or not registration.ts's guards
  * existed.
+ *
+ * THE STUB'S PREMISE IS NOW CHECKED, NOT ASSUMED. Everything above was typed
+ * by hand from a spike's notes, so on its own it proves only that this file's
+ * own fiction is internally consistent. e2e/registration.spec.ts re-measures
+ * both rejections against the REAL chrome.scripting API in a real browser on
+ * every run ("THE STUB'S PREMISE" test). If Chrome changes, that spec goes red
+ * and THIS FILE is what needs correcting.
  * ==========================================================================*/
 let registered: chrome.scripting.RegisteredContentScript[];
 

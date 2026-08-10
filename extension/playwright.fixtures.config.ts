@@ -1,7 +1,7 @@
 import { defineConfig } from "@playwright/test";
 
-// THREE Playwright configs. THE RULE: one config per EXTERNAL DEPENDENCY, not
-// one per suite. Before adding a fourth, name the dependency it needs that none
+// FOUR Playwright configs. THE RULE: one config per EXTERNAL DEPENDENCY, not
+// one per suite. Before adding a fifth, name the dependency it needs that none
 // of these already brings — if you cannot, it belongs in an existing one.
 //
 //   playwright.config.ts          — needs a WRANGLER WORKER. Its globalSetup
@@ -11,6 +11,14 @@ import { defineConfig } from "@playwright/test";
 //   playwright.visual.config.ts   — needs the PREVIEW GALLERY. Brings its own
 //                                   webServer on :4173, asserts computed style
 //                                   + screenshots.
+//   playwright.granted.config.ts  — needs a LOADED EXTENSION WITH <all_urls>
+//                                   ALREADY GRANTED. Its globalSetup builds
+//                                   dist/ and mirrors it to .tmp-granted-dist/
+//                                   with the host permission promoted from
+//                                   optional to required, because
+//                                   chrome.permissions.request() cannot be
+//                                   driven under automation. arbitration.spec
+//                                   and registration.spec run there.
 //   playwright.fixtures.config.ts — THIS ONE. Needs NOTHING: the specs serve
 //                                   their own static pages from e2e/serve.ts
 //                                   (localhost:3000 + 127.0.0.1:3001, two

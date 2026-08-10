@@ -12,3 +12,10 @@ extension.zip
 .tmp-injected-bundle/
 .tmp-zip-dist/
 .tmp-zip-dist.zip
+# Private prod bundle for test/background/registration-wiring.test.ts (it must
+# not read the shared dist/ — see that file's OUT_DIR comment).
+.tmp-registration-wiring/
+# dist/ with <all_urls> promoted to a required host permission, built by
+# playwright.granted.config.ts's globalSetup. NEVER a shippable artifact —
+# see e2e/granted-dist.ts.
+.tmp-granted-dist/

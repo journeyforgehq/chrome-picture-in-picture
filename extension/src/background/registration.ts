@@ -34,11 +34,24 @@
  * [] and the script was still registered and still running. That is why
  * ensureUnregistered() is wired to chrome.permissions.onRemoved in
  * background.ts — it is load-bearing there, not belt-and-braces.
+ *
+ * WHERE THOSE CLAIMS ARE NOW RE-MEASURED RATHER THAN REMEMBERED:
+ *
+ *   e2e/registration.spec.ts   — the two rejections above, against the REAL
+ *     chrome.scripting in a real browser, on every run. If Chrome ever makes
+ *     either call idempotent, that spec says so and the hand-written stub in
+ *     test/background/registration.test.ts gets corrected instead of quietly
+ *     describing a browser that no longer exists. Same file also proves that
+ *     unregistering actually STOPS the script running on a fresh page load.
+ *   test/background/registration-wiring.test.ts — that the SHIPPED background
+ *     bundle really wires permissions.onRemoved to this unregister call.
+ *     (The event itself cannot be made to fire under automation — see that
+ *     file's header.)
  * ==========================================================================*/
 
 export const SCRIPT_ID = "pip-embedded";
 
-const SCRIPT_OPTIONS: chrome.scripting.RegisteredContentScript = {
+export const SCRIPT_OPTIONS: chrome.scripting.RegisteredContentScript = {
   id: SCRIPT_ID,
   matches: ["<all_urls>"],
   allFrames: true,

@@ -22,6 +22,31 @@ Two loops:
   parked, not broken — they hold the Pro-gating assertions until the paid tier
   adds a gated surface to assert against.
 
+- **Granted-permission (`npm run e2e:granted`)** —
+  `playwright.granted.config.ts`. Needs one thing nothing else brings: a loaded
+  extension with `<all_urls>` **already granted**. Its `globalSetup` builds
+  `dist/` and mirrors it to `.tmp-granted-dist/` with the host permission
+  promoted from optional to required, because `chrome.permissions.request()`
+  cannot be driven under automation (the consent bubble is out-of-process and a
+  spike measured the call never settling). `src/static/manifest.json` is never
+  touched — `test/manifest.test.ts` pins the real allowlist.
+  - `arbitration.spec.ts` — the WRITE side of `window.__pipCoord`: content
+    script scores, worker ranks frames by `sender.frameId`, verdict comes back
+    per frame via `tabs.sendMessage(…, { frameId })`. Asserts that **exactly
+    one** frame ends up `isWinner: true`.
+  - `registration.spec.ts` — `chrome.scripting.registerContentScripts` against
+    the real API: register → visible → actually running in both frames →
+    unregister → gone and no longer running on a fresh load; plus both
+    idempotency guards, and a re-measurement of the duplicate-id /
+    nonexistent-id rejections that `test/background/registration.test.ts`'s
+    stub is built on.
+
+  **These prove the machinery under a granted permission, not the granting.**
+  Nothing here exercises `chrome.permissions.request()`, the consent bubble, or
+  `permissions.onRemoved` (which cannot be made to fire under automation — the
+  wiring for it is asserted in `test/background/registration-wiring.test.ts`
+  against the shipped bundle instead).
+
 - **Live (`npm run e2e:live`, manual)** — `playwright.stripe-live.config.ts`, a
   documented stub for a human-driven real-purchase run using a real
   `stripe listen`. Not run in CI. Add specs under `e2e/live/`.

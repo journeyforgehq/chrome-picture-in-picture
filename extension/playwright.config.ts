@@ -12,8 +12,16 @@ export default defineConfig({
   // Visual specs need the preview gallery on :4173, not this suite's worker
   // backend. They run under playwright.visual.config.ts instead. The detection
   // and gesture specs need neither the worker nor the gallery — they serve
-  // themselves — and run under playwright.fixtures.config.ts.
-  testIgnore: ["**/*-visual.spec.ts", "**/detection.spec.ts", "**/gesture.spec.ts"],
+  // themselves — and run under playwright.fixtures.config.ts. The arbitration
+  // and registration specs need a build with <all_urls> statically granted,
+  // which only playwright.granted.config.ts produces.
+  testIgnore: [
+    "**/*-visual.spec.ts",
+    "**/detection.spec.ts",
+    "**/gesture.spec.ts",
+    "**/arbitration.spec.ts",
+    "**/registration.spec.ts",
+  ],
   workers: 1,
   fullyParallel: false,
   timeout: STAGING ? 120_000 : 60_000,
