@@ -11,6 +11,14 @@ section for whether the plan's numbers needed correcting.
 
 Paths are relative to `extension/` unless stated otherwise.
 
+**Scope of this document.** Everything below records current state — what the
+code does today, not what it should do. Where this document points forward (to
+Task 19, or to the promise the `OptionsView.tsx` comment makes), it is
+**quoting the plan's own Step 2 and Step 3 instructions**, not offering a
+design recommendation of its own. The one place this document draws its own
+conclusion beyond what the plan or the code states outright is called out
+explicitly, inline, as an inference.
+
 ## Step 1 — `src/pip/entry.ts` (360 lines total)
 
 `entry.ts` is the single function (`pipEntry`) injected into the page via
@@ -51,26 +59,30 @@ comment (lines 1–56) bind every future edit, including the Pro tier's:
 | 12 | Tie-break: score, then area, then DOM order (**earlier wins**) | 292–296 |
 | 13 | `dryRun` returns **synchronously** — contract pinned in the type system by the `dryRun: true` overload at line 93 (return type `PipEntryResult`, not `PipEntryResult \| Promise<...>`) | 313–315 (overload: 93) |
 | 14 | Both failure shapes (sync throw + async rejection) → one `THREW` result with `errorName`, matched by property (`err.name`) rather than `instanceof Error` because the failure can cross a realm boundary | 317–359 |
-
-### Capabilities the plan's 14-row table did not list
-
-| # | Capability | Line(s) |
-|---|---|---|
 | 15 | Frame/`isTop` determination itself (`window === window.top`, and the `frame: "TOP" \| "SUBFRAME"` value threaded through every return) happens **before** arbitration and is read by arbitration's fallback (`isTop` is the no-`__pipCoord` default) | 97–98 |
 | 16 | **No-candidates reason priority.** When `scored.length === 0`, the reason returned is `sawDisabled ? "pip-disabled-by-site" : sawNotReady ? "not-ready" : "none-found"` — a specific precedence between two boolean flags set during filtering. This is a distinct decision from rows 5/6 (which only set the flags) and was not called out as its own row anywhere in the plan's table. | 302–309 |
 | 17 | Candidate `label` derivation: `el.dataset.label \|\| el.id \|\| "video-" + i`, i.e. a three-level fallback keyed to DOM index | 218 |
 | 18 | The full `PipEntryReason` union has exactly five members (`none-found`, `not-ready`, `pip-disabled-by-site`, `not-winner`, `pip-unavailable`) and the full `outcome` union has exactly three (`PIP_OK`, `PIP_EXITED`, `THREW`) — every existing return site was checked to confirm it produces one of these and no other value | 69–84 |
 | 19 | Public type contract: `PipEntryOptions`, `PipCandidate` (`label`/`score`/`width`/`height`), `PipEntryResult` (`frame`/`acted`/`winner`/`candidates`/`reason?`/`outcome?`/`errorName?`) — this is the shape `content.ts` and `background/action.ts` consume; any Pro branch that wants to report new information must extend this interface, not bypass it | 58–84 |
+| 20 | Rule 1 as a standalone, whole-body constraint (not just prose above): the function body must be entirely self-contained — no imports, no module-level constants, no helper functions, no closure variables — enforced by the "references no identifier outside its own body" test. Listed as its own row, not just header prose, so Task 19's parity audit has an explicit line to record a keep/drop decision against rather than inferring one from the intro text. | whole-body constraint; header rationale at 12–19, enforced by `test/pip/entry.test.ts:384` |
+
+Rows 15–20 are **this task's own findings**, not itemized anywhere in the
+plan's Step 1 table — they are folded into the same table, with continuing
+numbers, specifically so Task 19's parity audit cannot skip them as
+second-class just because they arrived from a closer read rather than from
+the plan text.
 
 ### Line-number accuracy
 
-Every one of the plan's 14 line-number ranges was checked against the file as
-it stands at c695a12 (Read tool, 1-indexed, matching `cat -n`). **All 14 were
-exact** — none needed correction. This was not assumed; each range was
-individually re-derived from the file content (e.g. row 10's own code line is
-216, inside the stated 203–216 comment+code range; row 11's code is 275–290,
-inside the stated 229–290 range). The file has not drifted since the plan was
-written.
+Every one of the plan's 14 line-number ranges (rows 1–14) was checked against
+the file as it stands at c695a12 (Read tool, 1-indexed, matching `cat -n`).
+**All 14 were exact** — none needed correction. This was not assumed; each
+range was individually re-derived from the file content (e.g. row 10's own
+code line is 216, inside the stated 203–216 comment+code range; row 11's code
+is 275–290, inside the stated 229–290 range). The file has not drifted since
+the plan was written. Rows 15–20 have no plan-provided numbers to check
+against — their line numbers are first-hand, read directly from the file
+during this task.
 
 ## Step 2 — the guard tests that constrain `entry.ts`
 
@@ -122,9 +134,12 @@ synchronicity invariant (rule 2 above) at all. The comment at lines 409–411
 already anticipates a *scoped* version of this constraint: "The existing guard
 only forbids `await` BEFORE `requestPictureInPicture()`. An await anywhere else
 would still make the [`__pipCoord`] lift a real race in every frame, on every
-page" — i.e. whatever replaces test #3 must keep forbidding `await` in the
-*synchronous, non-`dryRun`* control flow, even if the file as a whole gains an
-async branch elsewhere.
+page." **Inferred constraint (not from the plan):** reading that comment
+together with the code, whatever replaces test #3 must keep forbidding
+`await` in the *synchronous, non-`dryRun`* control flow, even if the file as a
+whole gains an async branch elsewhere. The plan does not say this; it follows
+from the existing comment's own stated reasoning about the `__pipCoord` race,
+applied to what a Pro-tier async branch would add.
 
 ### Closely related tests found — not "no-await" guards, but constrain the same contract
 
