@@ -281,26 +281,34 @@ describe("Options container — settings wiring", () => {
 });
 
 /* ============================================================================
- * SUBMISSION GATE — deliberately it.skip, not deleted and not passing.
+ * SUBMISSION GATE — LIVE as of 2026-08-10. It was `it.skip` until then.
  * ============================================================================
- * The options footer links to https://github.com/__ORG__/picture-in-picture.
- * `__ORG__` is a placeholder chosen to be obviously unfinished: an invented but
- * plausible org would survive review by LOOKING finished and then 404 for every
- * real user who clicked it.
+ * The options footer links to the public repository. It used to link to
+ * https://github.com/__ORG__/picture-in-picture — a placeholder chosen to be
+ * obviously unfinished, because an invented but plausible org would survive
+ * review by LOOKING finished and then 404 for every real user who clicked it.
  *
- * This is skipped rather than absent so it shows up in `npm test` output as a
- * standing pending item — a silently missing test is how a placeholder ships.
- * UN-SKIP IT (and it must pass) as part of the Chrome Web Store pre-submission
- * checklist, once the real org/repo exists. It reads the BUILT bundle, so it
- * also catches the token being reintroduced anywhere else in the options entry.
+ * The gate was skipped rather than absent so it showed up in every `npm test`
+ * run as a standing pending item; a silently missing test is how a placeholder
+ * ships. The org is now known (`journeyforgehq`), so it is un-skipped and must
+ * stay green.
+ *
+ * IT READS THE BUILT BUNDLE, AND THAT IS THE POINT. Asserting against the
+ * source constant would pass while some other file in the options entry still
+ * carried the token. The two assertions below are deliberately different
+ * questions: the first is "no placeholder survived", the second is "and the
+ * thing that replaced it is actually the URL we mean" — a gate that only
+ * checked for absence would also pass if the link had been deleted outright.
  * ==========================================================================*/
 describe("options submission gates", () => {
-  it.skip("ships no unresolved __ORG__ placeholder in the built options bundle", async () => {
+  it("ships no unresolved __ORG__ placeholder in the built options bundle", async () => {
     const { readFileSync } = await import("node:fs");
     const path = await import("node:path");
     const { fileURLToPath } = await import("node:url");
     const here = path.dirname(fileURLToPath(import.meta.url));
     const bundle = readFileSync(path.resolve(here, "../../dist/options.js"), "utf8");
     expect(bundle).not.toContain("__ORG__");
+    // Absence is not enough — see the header block.
+    expect(bundle).toContain("https://github.com/journeyforgehq/picture-in-picture");
   });
 });

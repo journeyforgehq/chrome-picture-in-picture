@@ -21,11 +21,14 @@ const SHORTCUTS_URL = "chrome://extensions/shortcuts";
  *  it is a property of this codebase, not of the deployment environment, and
  *  billing/config.ts is CORE-vendored (edits there are recorded drift).
  *
- *  __ORG__ is the project's placeholder convention, and it is deliberately
- *  UGLY: a plausible-looking invented org would survive review by looking
- *  finished and then 404 for real users. The pre-submission checklist greps for
- *  this token; test/options/options.test.tsx carries the matching skipped gate. */
-const SOURCE_URL = "https://github.com/__ORG__/picture-in-picture";
+ *  This was `__ORG__` until 2026-08-10 — the project's deliberately UGLY
+ *  placeholder convention, because a plausible-looking invented org would
+ *  survive review by looking finished and then 404 for every real user who
+ *  clicked it. The org is now known, so the token is gone and the submission
+ *  gate in test/options/options.test.tsx that guarded it is UN-SKIPPED: it
+ *  reads the BUILT bundle, so it also catches the token being reintroduced
+ *  anywhere else in the options entry. */
+const SOURCE_URL = "https://github.com/journeyforgehq/picture-in-picture";
 
 export function Options() {
   const [tier, setTier] = useState<Tier>("free");

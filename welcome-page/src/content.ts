@@ -19,9 +19,21 @@ import type { WelcomeContent } from "./content-types";
  *  - Some sites switch picture-in-picture off on their own players. Said
  *    plainly, without naming services.
  *
- * `__ORG__`, `__EXT_ID__` and `__DOMAIN__` are DELIBERATE placeholders. The
- * submission checklist greps for them; an obviously unfinished token is safer
- * than a plausible-looking fake URL that nobody notices is wrong.
+ * `__DOMAIN__` is a DELIBERATE placeholder. The submission checklist greps for
+ * it; an obviously unfinished token is safer than a plausible-looking fake URL
+ * that nobody notices is wrong. The domain is not chosen yet, so it stays.
+ *
+ * The EXTENSION-ID placeholder is GONE as of 2026-08-10, and NOT because it was
+ * filled in — the link it sat in could never work at all. See `pro.restoreHref`
+ * below. The ORG placeholder is resolved to `journeyforgehq`.
+ *
+ * NOTE FOR ANYONE EDITING THESE COMMENTS: `scripts/preflight.mjs` greps this
+ * whole file for double-underscore-wrapped SHOUTING tokens, comments included.
+ * Writing a resolved token here — even to explain that it is resolved — puts it
+ * straight back into the preflight report, and a guard whose output nobody
+ * trusts is the failure mode this project already hit once. (Writing the phrase
+ * "double underscore" in the token style does it too; that was measured.) Name
+ * them in prose instead.
  */
 export const content: WelcomeContent = {
   appName: "Picture in Picture",
@@ -34,7 +46,8 @@ export const content: WelcomeContent = {
   // field is a factory change scheduled for a later plan, and editing the
   // vendored core type here would be refused (or silently overwritten) by the
   // next `sync-core`. Kept commented so the intent survives the typecheck.
-  // sourceUrl: "https://github.com/__ORG__/picture-in-picture",
+  // The org is resolved now, so this is the real URL waiting for the field.
+  // sourceUrl: "https://github.com/journeyforgehq/picture-in-picture",
 
   /**
    * ACTIVATION — R-15, and the clip now EXISTS.
@@ -159,8 +172,41 @@ export const content: WelcomeContent = {
     blurb:
       "Popping a video out is free and stays free. Pro is the enhanced window — your preferred size remembered per site, playback controls inside the floating window, and subtitles that stay visible. One payment of $9.99, no subscription.",
     ctaLabel: "See what Pro adds",
+    // Ordinary https, on the placeholder domain. Checked for the restoreHref
+    // defect below and it does NOT have it: the scheme is navigable from a
+    // hosted page, so this link works the moment __DOMAIN__ is filled in.
     ctaHref: "https://__DOMAIN__/pro",
-    restoreHref: "chrome-extension://__EXT_ID__/options.html",
+    /**
+     * DEAD FIELD, AND NOT BECAUSE THE ID IS MISSING.
+     *
+     * This was a `chrome-extension://<extension id>/options.html` deep link,
+     * with the id left as a placeholder and recorded as "substitute before
+     * submission". Substituting it would produce a link that STILL DOES
+     * NOTHING: a hosted
+     * web page cannot navigate to a `chrome-extension://` URL unless the target
+     * is listed in `web_accessible_resources` with matching origins, and this
+     * manifest deliberately has none (fewer exposed resources = less
+     * extension-fingerprinting surface — see
+     * extension/src/static/manifest.json). Same class of bug as the dead
+     * `chrome://extensions/shortcuts` anchor already fixed in the options page.
+     *
+     * `WelcomeContent` cannot express "instructions instead of a link": the
+     * field is a REQUIRED string and CORE `sections/ProTeaser.tsx` renders it
+     * unconditionally as a button. Both files are CORE. So the affordance that
+     * actually works — plain instructions to open Options from the toolbar icon
+     * — is rendered by `src/child-sections/ProTeaserWithRestoreNote.tsx` from
+     * `pages/index.tsx`, and CORE `ProTeaser` is not mounted. Read that
+     * component's header for the itemised parity audit.
+     *
+     * Empty rather than a plausible URL: nothing reads this, and if something
+     * ever does, an empty href is visibly broken instead of quietly inert.
+     * This also drops the extension-id placeholder out of the preflight report,
+     * which is DELIBERATE and is not the guard going blind: the token was never
+     * "still to be filled in", because there was nothing to fill it with.
+     * test/restore-affordance.test.mjs holds the line instead, and it asks a
+     * better question — "does this page ship a chrome-extension:// link at all".
+     */
+    restoreHref: "",
   },
 
   uninstall: {
