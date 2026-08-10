@@ -100,3 +100,28 @@ test("built: the disclosure survives into public/", (t) => {
     "The disclosure is only in a JS bundle, not in server-rendered HTML — it must be readable without JS."
   );
 });
+
+// ---------------------------------------------------------------------------
+// The hero logo must be the SAME artwork the extension ships.
+//
+// It diverged once, silently: the 404 fix copied the extension's icon while that
+// was still the factory's flat-blue placeholder, and the later swap to real
+// artwork updated the extension only. The welcome page — the first page every new
+// install sees — kept shipping the placeholder, and nothing noticed because the
+// file existed and was a valid PNG.
+//
+// Comparing bytes rather than merely asserting presence is the point: "a file is
+// there" is exactly the check that passed all the way through.
+// ---------------------------------------------------------------------------
+test("hero logo is byte-identical to the icon the extension ships", () => {
+  const mine = readFileSync(join(root, "static", "icon-128.png"));
+  const shipped = readFileSync(
+    join(root, "..", "extension", "src", "static", "icons", "icon-128.png")
+  );
+  assert.ok(
+    mine.equals(shipped),
+    `welcome-page/static/icon-128.png (${mine.length} B) differs from the extension's ` +
+      `icon-128.png (${shipped.length} B) — the welcome page would ship different artwork ` +
+      `from the toolbar icon users just installed.`
+  );
+});
