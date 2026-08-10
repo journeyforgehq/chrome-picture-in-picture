@@ -496,14 +496,19 @@ describe("pipEntry — a rejected requestPictureInPicture must be REPORTED", () 
 });
 
 /* ============================================================================
- * pipEntry — prefs plumbing. THIS BLOCK ASSERTS NO CHANGE IN BEHAVIOUR.
+ * pipEntry — prefs plumbing. EVERY FREE-TIER PATH IS UNCHANGED.
  * ============================================================================
- * Every case below must end in the NATIVE window, because native is all this
- * function can do today. What is being measured is that the routing decision
- * can be CARRIED — warm from the worker's cache, cold from a page-side storage
- * read — without disturbing the path the free tier already takes. The Document
- * PiP branch lands in a later task, and when it does, any regression here is
- * attributable to it rather than to the plumbing.
+ * Every case below except the last two must end in the NATIVE window. What is
+ * being measured is that the routing decision can be CARRIED — warm from the
+ * worker's cache, cold from a page-side storage read — without disturbing the
+ * path the free tier already takes.
+ *
+ * The `document` case used to assert the interim mismatch it was named for:
+ * the route said "document" and the native window opened anyway. That branch
+ * has since landed, so it now asserts the enhanced window instead. The
+ * measurement it exists for — S-12's runtime size correction — lives in
+ * test/pip/entry-dpip.test.ts; what stays here is the one thing this block is
+ * about, that the ROUTE reaches the implementation it names.
  *
  * WHY THE ASYMMETRY IN THE COLD PATH IS SAFE (S-11): the WORKER's gesture scope
  * is turn-based — `await Promise.resolve()`, 0ms, no IPC, still loses it — but
@@ -549,15 +554,27 @@ describe("pipEntry — prefs plumbing", () => {
       .requestPictureInPicture;
     delete (window as unknown as Record<string, unknown>).chrome;
     delete (window as unknown as Record<string, unknown>).documentPictureInPicture;
+    delete (window as unknown as Record<string, unknown>).__pipWin;
   });
 
   /** happy-dom has no Document PiP, so `supported` reads false unless a test
    *  puts one here. Several cases below would otherwise route native for the
-   *  WRONG reason and pass while proving nothing. */
+   *  WRONG reason and pass while proving nothing.
+   *
+   *  The fake window reports its content box EXACTLY as requested, so nothing
+   *  here depends on S-12's size correction — that is measured on its own in
+   *  test/pip/entry-dpip.test.ts. */
   function stubDocumentPip() {
-    (window as unknown as Record<string, unknown>).documentPictureInPicture = {
-      requestWindow: () => Promise.resolve({}),
-    };
+    const requestWindow = vi.fn((opts: { width: number; height: number }) =>
+      Promise.resolve({
+        innerWidth: opts.width,
+        innerHeight: opts.height,
+        document: document.implementation.createHTMLDocument("pip"),
+        resizeBy: vi.fn(),
+      })
+    );
+    (window as unknown as Record<string, unknown>).documentPictureInPicture = { requestWindow };
+    return requestWindow;
   }
 
   /** The cold path's only I/O, stubbed at the shape entry.ts actually calls. */
@@ -620,25 +637,25 @@ describe("pipEntry — prefs plumbing", () => {
     expect(r.outcome).toBe("PIP_OK");
   });
 
-  it("carries a `document` decision without acting on it — INTERIM, by design", () => {
-    // THE POINT OF THIS TASK, stated as an assertion. All three conditions are
-    // true, so the decision is `document` and it survives the trip into the
-    // injected body. NOTHING acts on it yet: the native window still opens, and
-    // that is why a regression in the next task — the one that adds the second
-    // branch — is attributable to that task and not to this plumbing.
+  it("acts on a `document` decision by opening the ENHANCED window", () => {
+    // All three conditions are true, so the decision is `document`, it survives
+    // the trip into the injected body, and — since Task 8 — the enhanced window
+    // is what actually opens. The native call must NOT also happen: two windows
+    // for one click is the failure this branch has to avoid.
     //
-    // This test is expected to CHANGE when the enhanced window lands. Its job
-    // until then is to stop the mismatch from being silent: for one commit,
-    // `mode: "document"` describes the route taken, not the window opened.
-    stubDocumentPip();
+    // requestWindow is called SYNCHRONOUSLY, inside the gesture turn, for the
+    // same reason requestPictureInPicture is (rule 2). Asserting it before
+    // awaiting anything is what pins that.
+    const requestWindow = stubDocumentPip();
     const v = video({ label: "v" });
 
     const result = pipEntry({
       prefs: { ...FREE, tier: "pro", enhancedWindow: true },
     });
 
-    expect(v.requestPictureInPicture).toHaveBeenCalled(); // the NATIVE call
-    expect(requested).toHaveBeenCalledTimes(1);
+    expect(requestWindow).toHaveBeenCalledTimes(1);
+    expect(v.requestPictureInPicture).not.toHaveBeenCalled(); // no NATIVE call
+    expect(requested).not.toHaveBeenCalled();
     return (result as Promise<{ mode?: string; outcome?: string }>).then((r) => {
       expect(r.mode).toBe("document");
       expect(r.outcome).toBe("PIP_OK");

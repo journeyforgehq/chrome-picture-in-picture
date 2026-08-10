@@ -101,6 +101,11 @@ export interface PipEntryResult {
   /** Which implementation actually ran. Absent on dryRun and on every branch
    *  that returns before a PiP call, because nothing ran to report. */
   mode?: PipMode;
+  /** Set only when a mode was ATTEMPTED and handed off to another one. `mode`
+   *  always names the window the user actually got; this names the one that was
+   *  tried first, so "pro user silently getting the free window" is visible in
+   *  the result instead of being indistinguishable from a free-tier click. */
+  fellBackFrom?: PipMode;
 }
 
 /**
@@ -346,12 +351,11 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
     return "document";
   };
 
-  // Everything that actually opens a window. `_p` is the prefs the enhanced
-  // window will be built from; the native branch has no use for them, and the
-  // native branch is still the only branch there is.
+  // Everything that actually opens a window. `p` is the prefs the enhanced
+  // window is built from; the native branch has no use for them.
   const actNow = function (
     mode: PipMode,
-    _p: PipPrefs | null
+    p: PipPrefs | null
   ): PipEntryResult | Promise<PipEntryResult> {
     // ONE shape for BOTH failure modes. PiP can fail two ways — a synchronous
     // throw, and a promise rejection — and the two used to be reported
@@ -360,44 +364,140 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
     //
     // Not `instanceof Error`: the failure can cross a realm boundary, where the
     // page's Error is a different constructor than ours.
-    const failed = function (err: { name?: string } | null | undefined): PipEntryResult {
+    const failed = function (
+      err: { name?: string } | null | undefined,
+      m: PipMode
+    ): PipEntryResult {
       return {
         frame,
         acted: true,
         winner: best.candidate,
         candidates: candidates,
-        mode: mode,
+        mode: m,
         outcome: "THREW",
         errorName: (err && err.name) || "Error",
       };
     };
-    const entered: PipEntryResult = {
-      frame,
-      acted: true,
-      winner: best.candidate,
-      candidates: candidates,
-      mode: mode,
-      outcome: "PIP_OK",
+
+    // The free window, and the destination of every enhanced-window failure.
+    // `fellBackFrom` is carried onto BOTH results — a pro user who quietly got
+    // the free window must be distinguishable from a free user who got it.
+    const native = function (fellBackFrom?: PipMode): PipEntryResult | Promise<PipEntryResult> {
+      const entered: PipEntryResult = {
+        frame,
+        acted: true,
+        winner: best.candidate,
+        candidates: candidates,
+        mode: "native",
+        outcome: "PIP_OK",
+      };
+      if (fellBackFrom) entered.fellBackFrom = fellBackFrom;
+
+      // NOTHING may suspend above this line — see rule 2 in the header block.
+      // (The declarations above are plain assignments; they cannot suspend.)
+      try {
+        const entering = best.el.requestPictureInPicture();
+
+        // The activation was already spent by the call above, so observing the
+        // result costs nothing — and NOT observing it is what made the failure
+        // toasts unreachable. `.then`, never async/await: see rule 2. Guarded
+        // rather than assumed: a stub or an older engine may return undefined.
+        if (entering && typeof entering.then === "function") {
+          return entering.then(
+            function () {
+              return entered;
+            },
+            function (e: { name?: string } | null | undefined) {
+              const f = failed(e, "native");
+              if (fellBackFrom) f.fellBackFrom = fellBackFrom;
+              return f;
+            }
+          );
+        }
+        return entered;
+      } catch (err) {
+        const f = failed(err as { name?: string } | null | undefined, "native");
+        if (fellBackFrom) f.fellBackFrom = fellBackFrom;
+        return f;
+      }
     };
 
-    // NOTHING may suspend above this line — see rule 2 in the header block.
-    // (The two declarations above are plain assignments; they cannot suspend.)
-    try {
-      const entering = best.el.requestPictureInPicture();
+    if (mode === "native" || !p) return native();
 
-      // The activation was already spent by the call above, so observing the
-      // result costs nothing — and NOT observing it is what made the failure
-      // toasts unreachable. `.then`, never async/await: see rule 2. Guarded
-      // rather than assumed: a stub or an older engine may return undefined.
-      if (entering && typeof entering.then === "function") {
-        return entering.then(function () {
-          return entered;
-        }, failed);
-      }
-      return entered;
-    } catch (err) {
-      return failed(err as { name?: string } | null | undefined);
+    /* --- the enhanced window ---------------------------------------------
+     * Size resolution is INLINED for rule 1 (no outside identifiers).
+     * geometry.ts — SIZE_PRESETS, normalizeSize, sizeForOrigin — holds exactly
+     * these rules as the tested source of truth, and a later task pins the two
+     * together so they cannot drift. A stored size is untrusted input: it
+     * survives browser upgrades, screen changes and hand-editing, so a 0x0 or
+     * NaN reaches requestWindow unless it is clamped here. */
+    const presets: Record<string, { w: number; h: number }> = {
+      small: { w: 320, h: 180 },
+      medium: { w: 400, h: 225 },
+      large: { w: 640, h: 360 },
+    };
+    const stored = p.geometry ? p.geometry[location.origin] : undefined;
+    const raw = stored || presets[p.windowSize] || presets.medium;
+    const clamp = function (v: number, lo: number, hi: number): number {
+      return !isFinite(v) || v < lo ? lo : v > hi ? hi : Math.round(v);
+    };
+    const want = { w: clamp(raw.w, 240, 1920), h: clamp(raw.h, 135, 1080) };
+
+    let opening: Promise<any>;
+    try {
+      opening = (window as any).documentPictureInPicture.requestWindow({
+        width: want.w,
+        height: want.h,
+      });
+    } catch (_e) {
+      // A floating window beats an error, and the activation is time-based
+      // (~5s, S-11), so the native call still lands inside the same click.
+      return native("document");
     }
+    if (!opening || typeof opening.then !== "function") return native("document");
+
+    return opening.then(
+      function (win: any) {
+        /* S-12: requestWindow's `height` is NOT the content height. `outer`
+         * comes back at requested + 34, but `inner` is short by 52px on
+         * Chromium 131 and 56px on Chrome 151 — a VERSION-DEPENDENT deficit, so
+         * a constant here would be a bug waiting for a Chrome release. Measure
+         * it, correct it once, and never store it: the deficit is a property of
+         * the browser build, while geometry.ts stores what the USER chose.
+         *
+         * ONE resize per activation: a second call throws
+         * "NotAllowedError: resizeTo() requires user activation in document
+         * picture-in-picture". This is that one. */
+        const deficitH = want.h - win.innerHeight;
+        const deficitW = want.w - win.innerWidth;
+        if (deficitH !== 0 || deficitW !== 0) {
+          try {
+            win.resizeBy(deficitW, deficitH);
+          } catch (_e) {
+            /* a window a few pixels short beats no window at all */
+          }
+        }
+        // Paint immediately so the user never sees a white rectangle between
+        // this turn and the decorate injection that follows it.
+        try {
+          win.document.body.style.background = "#000";
+        } catch (_e) {
+          /* noop */
+        }
+        (window as any).__pipWin = win;
+        return {
+          frame,
+          acted: true,
+          winner: best.candidate,
+          candidates: candidates,
+          mode: "document",
+          outcome: "PIP_OK",
+        } as PipEntryResult;
+      },
+      function () {
+        return native("document");
+      }
+    );
   };
 
   const supported = typeof (window as any).documentPictureInPicture === "object";
