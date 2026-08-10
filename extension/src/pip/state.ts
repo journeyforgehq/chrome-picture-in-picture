@@ -30,14 +30,40 @@
  *    test/pip/state.test.ts for the enforced guard.
  * ==========================================================================*/
 
+import type { SizePreset } from "./geometry";
+
 export interface PipSettings {
   /** Requests <all_urls> when switched on; reaches videos inside embedded players. */
   embeddedPlayers: boolean;
   /** The toast. Off means silent failure, which some users prefer. */
   toastEnabled: boolean;
+  /** PRO. The Document PiP window. Default OFF and it must stay that way: the
+   *  enhanced window carries a 34px title bar showing the site's domain, and
+   *  shipping that silently is exactly what earned SuperPiP its 3.8 rating. */
+  enhancedWindow: boolean;
+  /** PRO. Which preset the enhanced window opens at when an origin has no
+   *  remembered size. */
+  windowSize: SizePreset;
+  /** PRO. Remember the size per site after the user resizes the window. */
+  rememberSizePerSite: boolean;
+  /** PRO. Draw play/pause, seek and speed controls inside the window. S-04 is
+   *  why this matters rather than being a nicety: chrome.commands do NOT fire
+   *  while the floating window has focus, so in-window controls are the only
+   *  control surface available at exactly the moment a user reaches for one. */
+  inWindowControls: boolean;
+  /** PRO. Force the video's text tracks to `showing` inside the window. */
+  subtitles: boolean;
 }
 
-export const DEFAULT_SETTINGS: PipSettings = { embeddedPlayers: false, toastEnabled: true };
+export const DEFAULT_SETTINGS: PipSettings = {
+  embeddedPlayers: false,
+  toastEnabled: true,
+  enhancedWindow: false,
+  windowSize: "medium",
+  rememberSizePerSite: true,
+  inWindowControls: true,
+  subtitles: false,
+};
 
 export interface ActivePip {
   tabId: number;

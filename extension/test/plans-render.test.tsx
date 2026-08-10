@@ -6,6 +6,7 @@ import "@testing-library/jest-dom";
 import { ThemeProvider, UpgradePaywall } from "../src/ui-kit";
 import { OptionsView } from "../src/options/OptionsView";
 import { PLANS } from "../src/billing/plans";
+import { DEFAULT_SETTINGS } from "../src/pip/state";
 
 /* ============================================================================
  * THE REAL $9.99 CARD — rendered, not described.
@@ -119,7 +120,7 @@ describe("the real PLANS, through the page that actually mounts them", () => {
       <ThemeProvider>
         <OptionsView
           tier="free"
-          settings={{ embeddedPlayers: false, toastEnabled: true }}
+          settings={{ ...DEFAULT_SETTINGS, embeddedPlayers: false, toastEnabled: true }}
           onSettingChange={vi.fn()}
           onOpenShortcuts={vi.fn()}
           restoring={false}

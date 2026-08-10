@@ -20,7 +20,7 @@ import {
   type PaywallPlan,
 } from "../src/ui-kit";
 import type { RestoreResult } from "../src/billing/entitlement";
-import type { PipSettings } from "../src/pip/state";
+import { DEFAULT_SETTINGS, type PipSettings } from "../src/pip/state";
 import type { Plan, PaidStatus } from "../src/contract";
 import { OptionsView } from "../src/options/OptionsView";
 // The SHIPPED plan array, not a fixture. See REAL_PLANS' own section below.
@@ -75,7 +75,7 @@ function OptionsViewCard({
   status,
   plan,
   restoreResult,
-  settings: initialSettings = { embeddedPlayers: false, toastEnabled: true },
+  settings: initialSettings = { ...DEFAULT_SETTINGS, embeddedPlayers: false, toastEnabled: true },
 }: {
   tier?: "free" | "pro";
   status?: PaidStatus;
@@ -226,7 +226,7 @@ function Gallery() {
 
         <Divider orientation="left">OptionsView — embedded players on</Divider>
         <div data-testid="optionsview-embedded-on">
-          <OptionsViewCard settings={{ embeddedPlayers: true, toastEnabled: true }} />
+          <OptionsViewCard settings={{ ...DEFAULT_SETTINGS, embeddedPlayers: true, toastEnabled: true }} />
         </div>
 
         <Divider orientation="left">OptionsView — restore 404</Divider>

@@ -5,6 +5,7 @@ import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom";
 import { ThemeProvider } from "../../src/ui-kit";
 import { OptionsView } from "../../src/options/OptionsView";
+import { DEFAULT_SETTINGS } from "../../src/pip/state";
 import type { PaywallPlan } from "../../src/ui-kit";
 
 const PLANS: PaywallPlan[] = [
@@ -21,7 +22,7 @@ const PRO_ROW_LABELS = [/enhanced window/i, /window size/i, /in-window controls/
 function renderOptions(overrides: Partial<React.ComponentProps<typeof OptionsView>> = {}) {
   const props: React.ComponentProps<typeof OptionsView> = {
     tier: "free",
-    settings: { embeddedPlayers: false, toastEnabled: true },
+    settings: { ...DEFAULT_SETTINGS, embeddedPlayers: false, toastEnabled: true },
     onSettingChange: vi.fn(),
     onOpenShortcuts: vi.fn(),
     restoring: false,
@@ -107,21 +108,21 @@ describe("OptionsView — embedded players row", () => {
   });
 
   it("toggling it on reports ('embeddedPlayers', true) to the container", async () => {
-    const props = renderOptions({ settings: { embeddedPlayers: false, toastEnabled: true } });
+    const props = renderOptions({ settings: { ...DEFAULT_SETTINGS, embeddedPlayers: false, toastEnabled: true } });
     const user = userEvent.setup();
     await user.click(screen.getByRole("switch", { name: /support embedded players/i }));
     expect(props.onSettingChange).toHaveBeenCalledWith("embeddedPlayers", true);
   });
 
   it("toggling it off reports ('embeddedPlayers', false)", async () => {
-    const props = renderOptions({ settings: { embeddedPlayers: true, toastEnabled: true } });
+    const props = renderOptions({ settings: { ...DEFAULT_SETTINGS, embeddedPlayers: true, toastEnabled: true } });
     const user = userEvent.setup();
     await user.click(screen.getByRole("switch", { name: /support embedded players/i }));
     expect(props.onSettingChange).toHaveBeenCalledWith("embeddedPlayers", false);
   });
 
   it("reflects the current setting in the switch's checked state", () => {
-    renderOptions({ settings: { embeddedPlayers: true, toastEnabled: true } });
+    renderOptions({ settings: { ...DEFAULT_SETTINGS, embeddedPlayers: true, toastEnabled: true } });
     expect(screen.getByRole("switch", { name: /support embedded players/i })).toBeChecked();
   });
 
@@ -135,7 +136,7 @@ describe("OptionsView — embedded players row", () => {
   });
 
   it("shows a non-alarming notice, and leaves the switch off, when the grant is declined", () => {
-    renderOptions({ siteAccessDenied: true, settings: { embeddedPlayers: false, toastEnabled: true } });
+    renderOptions({ siteAccessDenied: true, settings: { ...DEFAULT_SETTINGS, embeddedPlayers: false, toastEnabled: true } });
     const notice = screen.getByTestId("site-access-denied");
     expect(notice).toHaveTextContent(/still/i);
     expect(notice.querySelector(".ant-alert-error")).toBeNull();
@@ -150,14 +151,14 @@ describe("OptionsView — embedded players row", () => {
 
 describe("OptionsView — status messages row", () => {
   it("toggling it reports ('toastEnabled', false)", async () => {
-    const props = renderOptions({ settings: { embeddedPlayers: false, toastEnabled: true } });
+    const props = renderOptions({ settings: { ...DEFAULT_SETTINGS, embeddedPlayers: false, toastEnabled: true } });
     const user = userEvent.setup();
     await user.click(screen.getByRole("switch", { name: /show status messages/i }));
     expect(props.onSettingChange).toHaveBeenCalledWith("toastEnabled", false);
   });
 
   it("reflects the current setting in the switch's checked state", () => {
-    renderOptions({ settings: { embeddedPlayers: false, toastEnabled: false } });
+    renderOptions({ settings: { ...DEFAULT_SETTINGS, embeddedPlayers: false, toastEnabled: false } });
     expect(screen.getByRole("switch", { name: /show status messages/i })).not.toBeChecked();
   });
 });
