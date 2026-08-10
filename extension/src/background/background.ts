@@ -7,17 +7,8 @@ import { pipEntry } from "../pip/entry";
 import type { PipEntryResult } from "../pip/entry";
 import { showToast } from "../pip/toast";
 import { messageFor, severityFor } from "../pip/errors";
-import {
-  getSettings,
-  setSettings,
-  setActivePip,
-  clearActivePip,
-  DEFAULT_SETTINGS,
-  type PipSettings,
-} from "../pip/state";
-import { prefsFrom, PREFS_KEYS, type PipPrefs } from "../pip/prefs";
-import type { EntitlementCache } from "../billing/entitlement";
-import type { GeometryMap } from "../pip/geometry";
+import { getSettings, setSettings, setActivePip, clearActivePip } from "../pip/state";
+import { createPrefsRefresher, PREFS_KEYS, type PipPrefs } from "../pip/prefs";
 import { ensureRegistered, ensureUnregistered } from "./registration";
 
 export interface InstalledDetails {
@@ -251,17 +242,20 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
    * depends on a timing budget instead of on a structural guarantee, on every
    * click, for the ~99% of users who never buy Pro. This keeps that path
    * synchronous whenever the worker is warm.
+   *
+   * The refresh is SERIALISED and its failure mode is explicit — see
+   * createPrefsRefresher in src/pip/prefs.ts for the race it closes (the same
+   * one arbitrationChain closes above) and for why a failed read parks the
+   * cache at UNKNOWN rather than at a stale snapshot.
    * ========================================================================*/
   let cachedPrefs: PipPrefs | null = null;
 
-  async function refreshPrefs(): Promise<void> {
-    const stored = await chrome.storage.local.get([...PREFS_KEYS]);
-    cachedPrefs = prefsFrom(
-      { ...DEFAULT_SETTINGS, ...(stored.settings as Partial<PipSettings> | undefined) },
-      (stored.entitlement_cache as EntitlementCache | undefined) ?? null,
-      (stored.geometry as GeometryMap | undefined) ?? {}
-    );
-  }
+  const refreshPrefs = createPrefsRefresher(
+    () => chrome.storage.local.get([...PREFS_KEYS]),
+    (prefs) => {
+      cachedPrefs = prefs;
+    }
+  );
 
   void refreshPrefs();
   chrome.storage.onChanged.addListener((changes, area) => {
