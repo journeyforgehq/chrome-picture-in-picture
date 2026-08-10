@@ -156,6 +156,15 @@ export const CASES: DetectionCase[] = [
   // these rows ever diverge in the golden, that default changed under us.
   { id: "e06-vimeo-embed", winner: "embedded", inFrame: true },
   { id: "e07-generic-embed-no-allow", winner: "embedded", inFrame: true },
+  // R-14 Option B. E02's own limitation, made into a test: its ad sits BELOW
+  // the stream and loses 491 points of viewport intersection it would never
+  // lose on a real page. E08 puts the two in the same slot at the same size,
+  // both unmuted, so every per-video term cancels and the scores are EQUAL —
+  // at which point the winner is decided by DOM insertion order, and the ad is
+  // first. Written to fail, and it did: `Expected "stream", Received "ad-roll",
+  // candidates [ad-roll 1991, stream 1991]`. Turned green by the page-aware
+  // term, not by the muted-gated one, which never fires on this page.
+  { id: "e08-unmuted-ad-same-slot", winner: "stream" },
 ];
 
 const ORIGINS = { a: "http://localhost:3000", b: "http://127.0.0.1:3001" } as const;

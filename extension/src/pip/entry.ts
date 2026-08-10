@@ -153,6 +153,9 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
     candidate: PipCandidate;
     area: number;
     order: number;
+    /** Kept for the PAGE-AWARE term below, which cannot run until all are in. */
+    duration: number;
+    playing: boolean;
   }
   const scored: Scored[] = [];
 
@@ -197,7 +200,7 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
     score += el.muted ? 0 : 200;
     score += ratio * 500;
     score += Math.min(area / 200000, 1) * 300;
-    // R-14. THE ONLY TERM THAT REJECTS ADVERTS — 65 seconds, not 30.
+    // R-14, term 1 of 2. 65 seconds, not 30.
     // 15s, 30s and 60s are the three pre-roll lengths that are actually sold,
     // and at `< 30` the last two collected no penalty at all and then won on
     // rendered area, because an ad unit is routinely larger than the content
@@ -206,6 +209,10 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
     // ACCEPTED COST: a genuinely short MUTED clip is penalised. It is muted, so
     // it is rarely what somebody wants floated, and every other term still
     // favours a real video.
+    // This term is per-video and gated on MUTED, so it says nothing about an
+    // unmuted advert. Term 2 — the page-aware one, below this loop — is the one
+    // that does, and it needs every candidate's duration before it can score
+    // any of them. That is why this function scores in two passes.
     if (duration < 65 && el.muted) score -= 400;
 
     const label = el.dataset.label || el.id || "video-" + i;
@@ -214,7 +221,72 @@ export function pipEntry(options: PipEntryOptions = {}): PipEntryResult | Promis
       candidate: { label: label, score: score, width: rect.width, height: rect.height },
       area: area,
       order: i,
+      duration: duration,
+      playing: !el.paused,
     });
+  }
+
+  /* ==========================================================================
+   * R-14, term 2 of 2 — THE PAGE-AWARE ONE. Option B.
+   * ==========================================================================
+   * Every other term above is per-video, and that is precisely why term 1 could
+   * not settle the case this one exists for. Gated on `el.muted`, it never
+   * fires on an UNMUTED advert — and a pre-roll playing at player volume is not
+   * muted. Measured on e2e/fixtures/e08-unmuted-ad-same-slot.html, an unmuted
+   * 15s ad in the same slot as a live stream scored 1991.3541666666665 against
+   * the stream's 1991.3541666666665 — bit-identical, every per-video term
+   * cancelling — and the ad won because it was earlier in the DOM. A coin flip,
+   * not a decision.
+   *
+   * THE SIGNAL: an advert is short RELATIVE TO THE CONTENT IT INTERRUPTS,
+   * whether or not it has sound. A 15s roll beside a 40-minute stream is
+   * unambiguous. Two 10-minute videos on one page are not, and correctly get
+   * nothing — the term is a comparison, so it has no cliff to sit on the wrong
+   * side of, which is the whole reason it is shaped this way rather than as
+   * another absolute threshold.
+   *
+   * MEASURED ARITHMETIC, not assumed:
+   *   Infinity >= 4 * 15        -> true   a live stream penalises an ad roll
+   *   15       >= 4 * Infinity  -> false  nothing penalises the stream
+   *   Infinity >= 4 * Infinity  -> TRUE, and that is why the isFinite guard is
+   *                               here: without it two live streams — and the
+   *                               fixture suite is full of them, since
+   *                               captureStream reports Infinity — would
+   *                               penalise each other symmetrically.
+   *   NaN and 0 cannot reach this loop at all: the `duration > 5` filter above
+   *   drops both (NaN > 5 is false, 0 > 5 is false). isFinite would exclude NaN
+   *   anyway, and `x >= 4 * NaN` is false in either direction.
+   *
+   * WHY 500. It has to clear the largest lead an advert holds anywhere in the
+   * measured suite: on b13 the ad led on geometry alone by 291 (ad 1791 vs
+   * content 1500) while muted, and the same ad UNMUTED — this term's actual
+   * case — would also keep the +200 audio bonus, so 491. 500 clears that, and
+   * on e08 it converts a 0-point tie into a 500-point decision.
+   * The ceiling is +1000, the playing term, and the invariant is stronger than
+   * "this term alone stays under it": 400 + 500 = 900 < 1000, so even a video
+   * carrying BOTH advert penalties still outranks an otherwise identical PAUSED
+   * one. No combination of advert signals can overturn `playing`.
+   * NOT COVERED, stated rather than implied: an ad that is fully on screen
+   * against content that is entirely off it leads by up to 800 (500 of
+   * intersection + 300 of area), and no penalty below 1000 can be both large
+   * enough for that and small enough to keep the invariant above. At that point
+   * the advert is the only video the user can actually see.
+   * ========================================================================*/
+  for (let i = 0; i < scored.length; i++) {
+    const mine = scored[i];
+    if (!isFinite(mine.duration)) continue;
+    for (let j = 0; j < scored.length; j++) {
+      if (j === i) continue;
+      const other = scored[j];
+      // A PAUSED long video does not accuse anything: nothing is being
+      // interrupted, so a short clip that is actually playing is still the
+      // thing the user is watching.
+      if (!other.playing) continue;
+      if (other.duration >= 4 * mine.duration) {
+        mine.candidate.score -= 500;
+        break;
+      }
+    }
   }
 
   scored.sort(function (a, b) {

@@ -191,7 +191,7 @@
       },
       {
         "label": "ad",
-        "score": 1391
+        "score": 891
       }
     ],
     "b04-playing-offscreen-vs-paused-onscreen": [
@@ -252,7 +252,7 @@
       },
       {
         "label": "ad",
-        "score": 1391
+        "score": 891
       }
     ],
     "c01-display-none": [],
@@ -290,7 +290,7 @@
       },
       {
         "label": "ad-roll",
-        "score": 900
+        "score": 400
       }
     ],
     "e03-videojs-shape": [
@@ -321,6 +321,16 @@
       {
         "label": "embedded",
         "score": 2000
+      }
+    ],
+    "e08-unmuted-ad-same-slot": [
+      {
+        "label": "stream",
+        "score": 1991
+      },
+      {
+        "label": "ad-roll",
+        "score": 1491
       }
     ]
   }
