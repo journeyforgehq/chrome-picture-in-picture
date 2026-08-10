@@ -37,7 +37,7 @@ export const content: WelcomeContent = {
   // sourceUrl: "https://github.com/__ORG__/picture-in-picture",
 
   /**
-   * ACTIVATION — and the biggest gap in this file.
+   * ACTIVATION — R-15, and the clip now EXISTS.
    *
    * The intended activation is a real, playable <video> ON THIS PAGE: the first
    * pop-out then happens with the pin instruction still in the same viewport,
@@ -46,16 +46,24 @@ export const content: WelcomeContent = {
    * extension/src/pip/entry.ts). If pop-out fails on our own welcome page,
    * detection is broken and we find out on day one instead of via reviews.
    *
-   * `WelcomeContent` cannot express that. `tryNow` is `{ label, href, note }`
+   * `WelcomeContent` STILL cannot express it. `tryNow` is `{ label, href, note }`
    * and Hero.tsx renders it as an antd <Button href=...> — there is no field
-   * for a media asset and no section that renders one. So this points at a
-   * sample-clip page that DOES NOT EXIST YET (no such route in src/pages/), on
-   * the placeholder domain, and stays visibly unfinished on purpose.
-   * Reported upward rather than silently dropped.
+   * for a media asset and no section that renders one, and both files are CORE.
+   * So the clip is rendered from `src/pages/index.tsx`, a child-owned slot, by
+   * `src/child-sections/SampleVideo.tsx`. Read that file's header for why this
+   * takes R-15's Option B rather than its recommended Option A (an optional
+   * `tryNow.video` field, which needs a factory bump and a portfolio-wide
+   * re-verify, bundled with `sourceUrl`).
+   *
+   * `href` is therefore an IN-PAGE ANCHOR, not a route. It used to be
+   * `https://__DOMAIN__/sample-video` — a page that never existed, on the
+   * placeholder domain, kept visibly unfinished on purpose. It exists now, so
+   * the stopgap is gone and the button scrolls to it. The anchor is
+   * `#try-it` on SampleVideo's <section>; renaming that id breaks this button.
    */
   tryNow: {
     label: "Try it on a sample video",
-    href: "https://__DOMAIN__/sample-video",
+    href: "#try-it",
     note: "Press play, then click the extension icon in your toolbar — the video pops into a floating window.",
   },
 

@@ -1,0 +1,19 @@
+WEBVTT
+
+NOTE
+Captions for static/sample-clip.webm. The clip carries a SILENT audio track, so
+these describe what is on screen and what to do with it rather than transcribing
+speech. Hand-written; scripts/make-sample-clip.sh does not regenerate them.
+Keep the cue times inside the clip's 12 seconds.
+
+1
+00:00:00.000 --> 00:00:04.000
+Sample clip: a blue gradient with the words "Picture in Picture".
+
+2
+00:00:04.000 --> 00:00:08.000
+While it plays, click the extension icon in your toolbar.
+
+3
+00:00:08.000 --> 00:00:12.000
+The clip moves into a floating window that stays above your other tabs.
