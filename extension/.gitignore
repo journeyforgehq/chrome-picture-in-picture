@@ -19,3 +19,7 @@ extension.zip
 # playwright.granted.config.ts's globalSetup. NEVER a shippable artifact —
 # see e2e/granted-dist.ts.
 .tmp-granted-dist/
+# Private prod bundle for the __ORG__ submission gate in
+# test/options/options.test.tsx — must not read the shared dist/, same
+# reason as .tmp-injected-bundle/ above.
+.tmp-options-gate/

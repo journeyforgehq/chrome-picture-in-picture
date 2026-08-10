@@ -299,16 +299,61 @@ describe("Options container — settings wiring", () => {
  * questions: the first is "no placeholder survived", the second is "and the
  * thing that replaced it is actually the URL we mean" — a gate that only
  * checked for absence would also pass if the link had been deleted outright.
+ *
+ * IT BUILDS ITS OWN PRODUCTION BUNDLE, AND THAT IS ALSO THE POINT. This gate
+ * used to read the SHARED dist/options.js, on the unstated assumption that
+ * whatever last wrote it was a production build. It is not: test/webpack-
+ * config.test.ts and others rebuild dist/ too, some of them in DEV mode
+ * (webpack.dev.cjs does not minify), and vitest runs test files concurrently —
+ * so whether this gate saw a prod or a dev bundle depended purely on
+ * scheduling. The literal token `__ORG__` lives on in a SOURCE COMMENT
+ * explaining that it used to be here (see options.tsx, a few lines above the
+ * SOURCE_URL constant) — deliberately, as documentation, and that comment
+ * should not be deleted just to make this test stop depending on the file
+ * that survives it. Production minification strips comments; development
+ * builds do not. So a dev-mode dist/options.js fails this gate for a reason
+ * that has nothing to do with whether the codebase actually ships the
+ * placeholder — same failure mode test/injected-bundle.test.ts's OUT_DIR
+ * comment documents for background.js. The fix is the same one: build a
+ * private production bundle that nothing else writes, and read that.
  * ==========================================================================*/
 describe("options submission gates", () => {
   it("ships no unresolved __ORG__ placeholder in the built options bundle", async () => {
-    const { readFileSync } = await import("node:fs");
+    const { existsSync, readFileSync } = await import("node:fs");
     const path = await import("node:path");
     const { fileURLToPath } = await import("node:url");
+    const { createRequire } = await import("node:module");
+
     const here = path.dirname(fileURLToPath(import.meta.url));
-    const bundle = readFileSync(path.resolve(here, "../../dist/options.js"), "utf8");
+    const require_ = createRequire(import.meta.url);
+    const webpack = require_("webpack");
+    const prodConfig = require_("../../webpack/webpack.prod.cjs");
+    const OUT_DIR = path.resolve(here, "../../.tmp-options-gate");
+    const BUNDLE = path.resolve(OUT_DIR, "options.js");
+
+    const stats = await new Promise<any>((resolve, reject) => {
+      webpack(
+        { ...prodConfig, output: { ...prodConfig.output, path: OUT_DIR, clean: true } },
+        (err: Error | null, s: any) => (err ? reject(err) : resolve(s))
+      );
+    });
+    if (stats.hasErrors()) {
+      throw new Error("webpack failed:\n" + stats.toString({ all: false, errors: true }));
+    }
+    expect(existsSync(BUNDLE), `expected a production bundle at ${BUNDLE}`).toBe(true);
+
+    const bundle = readFileSync(BUNDLE, "utf8");
+
+    // Guard against the exact confusion the header block describes: if the
+    // bundle is unminified, this is a dev build, not what ships, and every
+    // assertion below would be testing the wrong artifact.
+    expect(
+      bundle.includes("function Options("),
+      "bundle is UNMINIFIED — this is a dev build, not what ships"
+    ).toBe(false);
+
     expect(bundle).not.toContain("__ORG__");
     // Absence is not enough — see the header block.
     expect(bundle).toContain("https://github.com/journeyforgehq/picture-in-picture");
-  });
+  }, 120_000);
 });
