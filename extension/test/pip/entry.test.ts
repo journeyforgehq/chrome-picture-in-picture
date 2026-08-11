@@ -393,12 +393,22 @@ describe("pipEntry — serialization safety", () => {
     expect(rebuilt({ dryRun: true }).winner).toBeNull();
   });
 
-  it("contains no await before the requestPictureInPicture call", () => {
-    const src = pipEntry.toString();
-    const callAt = src.indexOf("requestPictureInPicture()");
-    expect(callAt).toBeGreaterThan(-1);
-    expect(src.slice(0, callAt)).not.toMatch(/\bawait\b/);
-  });
+  /* RETIRED, NOT LOST — "contains no await before the requestPictureInPicture
+   * call" used to live here. It, and the two in the next describe block, are
+   * now test/pip/entry-invariant.test.ts. Go and read that file before
+   * concluding this one got thinner.
+   *
+   * They were source-text PROXIES for "nothing suspends above the first PiP
+   * call". The replacement asserts that property directly, measures it against
+   * `requestWindow(` as well as `requestPictureInPicture()` (the free path was
+   * the only one this one covered), and adds four things none of the three had:
+   * that a PiP call exists at all, that no `.then` chain sits above it, that
+   * the dryRun return sits above it, and that the four inlined helpers are not
+   * quietly re-imported. Every one of those is mutation-checked.
+   *
+   * Authorised by docs/superpowers/plans/decisions-pro-tier.md (Part 2), whose
+   * standing condition was that the replacement land FIRST. Evidence that it
+   * did: docs/superpowers/plans/parity-pro.md. */
 });
 
 describe("pipEntry — synchronicity is a contract, not an implementation detail", () => {
@@ -407,18 +417,21 @@ describe("pipEntry — synchronicity is a contract, not an implementation detail
   // never win the tab back). That is safe ONLY because pipEntry runs to completion
   // synchronously — no other frame or event can observe the lifted flag.
   //
-  // The existing guard only forbids `await` BEFORE requestPictureInPicture(). An
-  // await anywhere else would still make the lift a real race in every frame, on
-  // every page. These two assertions defend the coupling that content.ts relies on.
-  it("is not an async function", () => {
-    expect(pipEntry.constructor.name).toBe("Function");
-    expect(Object.prototype.toString.call(pipEntry)).toBe("[object Function]");
-  });
-
-  it("contains no await anywhere in its body, not merely before the PiP call", () => {
-    expect(pipEntry.toString()).not.toMatch(/\bawait\b/);
-  });
-
+  /* RETIRED, NOT LOST — "is not an async function" and "contains no await
+   * anywhere in its body, not merely before the PiP call" used to sit here,
+   * with the first of the trio in the describe block above. All three moved to
+   * test/pip/entry-invariant.test.ts, which states the invariant they were
+   * proxies for and is mutation-checked assertion by assertion. See the longer
+   * note above the previous `});` for what the replacement adds.
+   *
+   * Neither guarantee was weakened. "Not an async function" is now measured
+   * twice over — the same two runtime checks, plus a file-wide source check
+   * that no helper INSIDE the body is async either, which the retired version
+   * could not see. "No await" is likewise still asserted file-wide.
+   *
+   * The assertion below stays HERE, not there: it is the only one of the five
+   * that exercises pipEntry's BEHAVIOUR rather than its source, and it belongs
+   * beside the dryRun tests it protects. */
   it("returns a plain object rather than a thenable", () => {
     document.body.innerHTML = "";
     const r = pipEntry({ dryRun: true }) as unknown as { then?: unknown };
