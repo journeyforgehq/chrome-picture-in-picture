@@ -319,6 +319,55 @@ test.describe("the enhanced window @dpip", () => {
     expect(after.rect, ctx).toEqual([640, 360]);
   });
 
+  test("a SECOND restore leaves the page exactly as the first one left it", async ({ page }) => {
+    /* WHY THIS IS A BROWSER TEST AND NOT ONLY A UNIT ONE. `restore` is reachable
+     * from two directions — the PiP window's own pagehide listener and the
+     * handle enhanceWindow returns — so a close that also triggers an explicit
+     * teardown runs it twice. Before the idempotence guard, the second run found
+     * `__pipHome` already deleted and took the `document.body.appendChild`
+     * fallback: the video was YANKED out of #stage and dropped at the end of the
+     * body, where it no longer inherits the player's layout. happy-dom can see
+     * the reparenting; it cannot see that the element then renders at a
+     * different size in a different place, which is the part the user suffers.
+     *
+     * So this asserts the geometry and captures the restored PAGE for a human —
+     * every other frame in this file is of the PiP window, and the page the user
+     * comes back to is a surface in its own right. */
+    await open(page);
+    await openAndEnhance(page);
+
+    const after = await page.evaluate(() => {
+      window.__pipApi!.restore();
+      window.__pipApi!.restore(); // the one that used to break the page
+      const v = document.querySelector<HTMLVideoElement>("video");
+      const r = v!.getBoundingClientRect();
+      return {
+        videoCount: document.querySelectorAll("video").length,
+        parent: v!.parentElement?.id ?? v!.parentElement?.tagName ?? null,
+        // A direct child of <body> is the exact symptom of the fallback branch.
+        inStage: !!document.querySelector("#stage video"),
+        rect: [Math.round(r.width), Math.round(r.height)],
+        objectFit: getComputedStyle(v!).objectFit,
+        paused: v!.paused,
+      };
+    });
+    const ctx = `\n  after double restore: ${JSON.stringify(after)}\n`;
+
+    expect(after.videoCount, ctx).toBe(1);
+    expect(after.parent, ctx).toBe("stage");
+    expect(after.inStage, ctx).toBe(true);
+    // The page's own layout, not the PiP window's: the enhanced sheet is gone
+    // with its document, so `object-fit: contain !important` must no longer
+    // apply and the element is back at the size the fixture gives it.
+    expect(after.rect, ctx).toEqual([640, 360]);
+    expect(after.paused, ctx).toBe(false);
+
+    mkdirSync(SCREENS, { recursive: true });
+    const file = join(SCREENS, "dpip-restored-page.png");
+    await page.screenshot({ path: file });
+    console.log(`  captured ${file}`);
+  });
+
   test("the window RENDERS — CSS asserted on the real element, and a frame captured", async ({
     page,
     context,

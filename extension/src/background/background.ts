@@ -2,7 +2,7 @@
 import { config } from "../billing/config";
 import { decideOutcome } from "./action";
 import { pickWinner, recordScore, pruneFrame, dropTab, type TabScores } from "./arbitrate";
-import { PIP_COORD, PIP_SCORE_REPORT } from "../pip/messages";
+import { PIP_COORD, PIP_DPIP_CLOSED, PIP_SCORE_REPORT } from "../pip/messages";
 import { pipEntry } from "../pip/entry";
 import type { PipEntryResult } from "../pip/entry";
 import { enhanceWindow } from "../pip/enhance";
@@ -175,6 +175,26 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
     return false;
   });
 
+  /* THE ENHANCED WINDOW CLOSED. Sent by enhanceWindow's restore (src/pip/
+   * enhance.ts) from the PiP window's pagehide — the only event that covers all
+   * three ways it can go: the user closing it, a navigation taking it, and
+   * Chrome replacing it with another PiP surface. There is no chrome.* event
+   * that tells the worker any of this.
+   *
+   * Without it `activePip` outlives the window, the next toolbar click takes
+   * the EXIT branch against a window that is not there, and the user's click
+   * silently does nothing.
+   *
+   * Returns false: `clearActivePip` is fire-and-forget storage work and the
+   * page is not waiting on an answer — it is in the middle of unloading and may
+   * well be gone before one could arrive. */
+  chrome.runtime.onMessage.addListener((message) => {
+    const msg = message as { type?: string } | null;
+    if (!msg || msg.type !== PIP_DPIP_CLOSED) return false;
+    void clearActivePip();
+    return false;
+  });
+
   // A closed tab's frames can never report again; without this the session map
   // grows for the life of the browser. (tabs.onRemoved needs no permission —
   // only the url/title/favIconUrl fields are gated by "tabs".)
@@ -332,6 +352,22 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
       // executeScript in the listener, and test/background/invariant.test.ts
       // reads exactly that slice; everything here runs in the promise tail,
       // long after the gesture was spent.
+      //
+      // ITS RETURN VALUE IS DISCARDED, AND THAT IS SAFE — MEASURED, not
+      // assumed. enhanceWindow returns { restore: fn }, which is not
+      // structured-cloneable, and the open question was whether executeScript
+      // would REJECT it — which would fail this step AFTER the window was
+      // already open and styled, leaving a confusing partial state. Probed
+      // against the real API in a loaded extension (Chromium 131.0.6778.33, via
+      // the e2e/granted-dist.ts harness — the only route to a real chrome.*):
+      // the result serializer is JSON-ish and LOSSY, not clone-strict. The
+      // shipped enhanceWindow's own source, injected and returning
+      // { restore: fn }, RESOLVED with `result: {}` — the function property
+      // silently dropped. An HTMLElement (showToast's long-standing precedent)
+      // and even a cyclic object behave the same way; nothing rejects. So the
+      // signature stays as it is for the unit tests, and the worker simply
+      // never reads the handle — the page keeps its own copy on the pagehide
+      // listener, which is where restore is actually needed.
       if (winnerFrame?.result?.mode === "document") {
         if (!cachedPrefs) await refreshPrefs();
         const prefs = cachedPrefs;

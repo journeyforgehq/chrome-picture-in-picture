@@ -59,8 +59,15 @@
  *    HTML, so it gets real buttons. That is why buildControls lives here rather
  *    than being deferred as polish.
  *
- * SCOPE. close/restore messaging is Task 11 and resize persistence is Task 12;
- * each gets its own visual verification, which is why the plan splits them.
+ * 6. RESTORE ALSO REPORTS. The worker's `activePip` record is what makes the
+ *    next toolbar click choose "exit" over "open", and Chrome gives the worker
+ *    no notification that a Document PiP window closed. So restore sends
+ *    PIP_DPIP_CLOSED — after the video is home, never before, and swallowing
+ *    every failure, because a sleeping worker must not be able to strand the
+ *    user's <video> in a window that is going away.
+ *
+ * SCOPE. Resize persistence is Task 12 and gets its own visual verification,
+ * which is why the plan splits it out.
  * ==========================================================================*/
 
 export interface EnhanceOptions {
@@ -248,7 +255,22 @@ export function enhanceWindow(input: { win?: Window | null; opts: EnhanceOptions
   // keep firing into a torn-down window once per PiP session, forever.
   const detach = opts.inWindowControls ? buildControls(doc, stage, video) : null;
 
+  /* RUNS AT MOST ONCE. `restore` is reachable from two directions — the
+   * pagehide listener below, and the handle this function returns — so a close
+   * that also triggers an explicit teardown calls it twice. The second call
+   * would find `__pipHome` already deleted and fall through to the
+   * `document.body.appendChild` fallback, YANKING the already-restored video out
+   * of the site's player and dropping it at the end of the body: a visible,
+   * permanent regression on the user's page, produced by the one function whose
+   * whole job is to prevent one. It would also report the window closed a second
+   * time, clearing an activePip record that may by then belong to a NEW window.
+   *
+   * A closure flag, not a `__pipHome` check: the record is page-global and a
+   * later session legitimately writes a new one. */
+  let restored = false;
   const restore = function () {
+    if (restored) return;
+    restored = true;
     if (detach) detach();
     const h = (window as unknown as { __pipHome?: { parent: Node | null; next: Node | null } })
       .__pipHome;
@@ -256,6 +278,47 @@ export function enhanceWindow(input: { win?: Window | null; opts: EnhanceOptions
     else document.body.appendChild(video);
     delete (window as unknown as { __pipHome?: unknown }).__pipHome;
     delete (window as unknown as { __pipWin?: unknown }).__pipWin;
+
+    /* TELL THE WORKER, and deliberately AFTER the video is back.
+     *
+     * The worker wrote `activePip` when it opened this window and reads it on
+     * the next toolbar click to choose between "open" and "exit". Nothing in
+     * Chrome tells it the window went away, so without this message the next
+     * click takes the EXIT branch against a window that no longer exists and
+     * does NOTHING — a dead toolbar button with no error and no toast.
+     *
+     * ORDER IS THE POINT. Restoring the user's video is what the user can SEE;
+     * this is bookkeeping. A terminated worker makes sendMessage reject with
+     * "Could not establish connection" — routine, not exceptional — and a throw
+     * from here must never be able to strand the <video> inside a closing
+     * window. Hence: move first, message second, and swallow both shapes of
+     * failure (the promise form REJECTS, the callback form THROWS synchronously
+     * once the extension context is invalidated).
+     *
+     * `chrome.runtime` is absent in a plain page context and `.id` goes
+     * undefined after an extension update or reload mid-session, so both are
+     * checked rather than assumed.
+     *
+     * The type is INLINED rather than imported from ./messages — rule 1: this
+     * body is shipped as source text and may name no outside identifier. The
+     * two spellings are held together by a test that reads this file. */
+    try {
+      const c = (
+        window as unknown as {
+          chrome?: { runtime?: { id?: string; sendMessage?: (m: unknown) => unknown } };
+        }
+      ).chrome;
+      if (c && c.runtime && c.runtime.id && c.runtime.sendMessage) {
+        const p = c.runtime.sendMessage({ type: "PIP_DPIP_CLOSED" });
+        if (p && typeof (p as Promise<unknown>).catch === "function") {
+          (p as Promise<unknown>).catch(function () {
+            /* worker asleep; the video is already home, which is what matters */
+          });
+        }
+      }
+    } catch (_e) {
+      /* extension context invalidated */
+    }
   };
   win.addEventListener("pagehide", restore);
   return { restore: restore };
