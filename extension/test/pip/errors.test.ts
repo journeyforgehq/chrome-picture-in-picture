@@ -10,7 +10,10 @@ describe("pip error catalogue", () => {
     }
   });
 
-  it("carries the seven states the free product can reach", () => {
+  it("carries the seven states the free product can reach, plus the Pro fallback notice", () => {
+    // Was seven ("the seven states the free product can reach") before this
+    // task. ENHANCED_UNAVAILABLE is the eighth: it does not exist on the free
+    // path at all, since only Pro ever attempts the enhanced window.
     expect(PIP_ERROR_CODES).toEqual([
       "NO_VIDEO",
       "NOT_READY",
@@ -19,6 +22,7 @@ describe("pip error catalogue", () => {
       "PIP_UNAVAILABLE",
       "PIP_REFUSED",
       "RESTRICTED_URL",
+      "ENHANCED_UNAVAILABLE",
     ]);
   });
 
@@ -71,5 +75,14 @@ describe("pip error catalogue", () => {
     expect(severityFor("IFRAME_BLOCKED")).toBe("blocked");
     expect(severityFor("PIP_UNAVAILABLE")).toBe("blocked");
     expect(severityFor("PIP_REFUSED")).toBe("blocked");
+  });
+
+  it("ENHANCED_UNAVAILABLE reads as information, not as a failure", () => {
+    // The user still got a floating window. Styling this as `blocked` would tell
+    // a paying customer their purchase broke when in fact it degraded.
+    expect(severityFor("ENHANCED_UNAVAILABLE")).toBe("info");
+    expect(messageFor("ENHANCED_UNAVAILABLE")).toBe(
+      "Enhanced window unavailable — opened the standard one instead."
+    );
   });
 });

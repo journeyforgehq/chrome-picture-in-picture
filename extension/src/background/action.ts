@@ -30,6 +30,17 @@ export function decideOutcome(results: PipEntryResult[]): ActionOutcome {
   // picked this one.
   const actor = results.find((r) => r.acted && r.outcome);
   if (actor) {
+    // A Pro user asked for the enhanced window and got the standard one. Say so
+    // once, quietly. Not `blocked`: the click worked, and a red-flavoured toast
+    // would read as "your purchase is broken". Gated on PIP_OK specifically —
+    // if the native fallback ITSELF then failed (outcome "THREW" with
+    // fellBackFrom still set), this branch does not match and control falls
+    // through to the errorName checks below, which report the real failure
+    // instead of the fallback notice. The user got no window at all in that
+    // case and needs the actionable message.
+    if (actor.outcome === "PIP_OK" && actor.fellBackFrom === "document") {
+      return { toast: "ENHANCED_UNAVAILABLE" };
+    }
     if (actor.outcome === "PIP_OK" || actor.outcome === "PIP_EXITED") return { toast: null };
     if (actor.errorName === "SecurityError") return { toast: "IFRAME_BLOCKED" };
     // NOT PIP_UNAVAILABLE. Reaching this line means entry.ts got past its

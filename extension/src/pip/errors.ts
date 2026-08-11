@@ -9,6 +9,7 @@ export const PIP_ERROR_CODES = [
   "PIP_UNAVAILABLE",
   "PIP_REFUSED",
   "RESTRICTED_URL",
+  "ENHANCED_UNAVAILABLE",
 ] as const;
 
 export type PipErrorCode = (typeof PIP_ERROR_CODES)[number];
@@ -35,8 +36,14 @@ const MESSAGES: Record<PipErrorCode, string> = {
   PIP_UNAVAILABLE: "Picture-in-picture is turned off in this browser.",
   PIP_REFUSED: "Couldn't open the floating window. Click the icon and try again.",
   RESTRICTED_URL: "Chrome blocks extensions on this page.",
+  ENHANCED_UNAVAILABLE: "Enhanced window unavailable — opened the standard one instead.",
 };
 
+/* ENHANCED_UNAVAILABLE is the only code in this file that fires on a
+ * SUCCESSFUL click — the user got a floating window, just not the enhanced
+ * one they paid for. `blocked` styling would tell a paying customer their
+ * purchase broke when in fact it degraded gracefully to the free window, so
+ * this stays `info`. */
 const SEVERITIES: Record<PipErrorCode, PipSeverity> = {
   NO_VIDEO: "info",
   NOT_READY: "info",
@@ -45,6 +52,7 @@ const SEVERITIES: Record<PipErrorCode, PipSeverity> = {
   PIP_UNAVAILABLE: "blocked",
   PIP_REFUSED: "blocked",
   RESTRICTED_URL: "tooltip",
+  ENHANCED_UNAVAILABLE: "info",
 };
 
 export function messageFor(code: PipErrorCode): string {

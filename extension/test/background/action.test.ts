@@ -101,3 +101,33 @@ describe("decideOutcome", () => {
     expect(out.toast).toBe("PIP_REFUSED");
   });
 });
+
+describe("decideOutcome — the enhanced-window fallback", () => {
+  it("says so when the enhanced window failed and the native one opened instead", () => {
+    expect(decideOutcome([{ frame: "TOP", acted: true, winner: null, candidates: [],
+      mode: "native", fellBackFrom: "document", outcome: "PIP_OK" }]))
+      .toEqual({ toast: "ENHANCED_UNAVAILABLE" });
+  });
+
+  it("stays SILENT on an ordinary native success — success has never had a toast", () => {
+    expect(decideOutcome([{ frame: "TOP", acted: true, winner: null, candidates: [],
+      mode: "native", outcome: "PIP_OK" }])).toEqual({ toast: null });
+  });
+
+  it("stays silent when the enhanced window opened as intended", () => {
+    expect(decideOutcome([{ frame: "TOP", acted: true, winner: null, candidates: [],
+      mode: "document", outcome: "PIP_OK" }])).toEqual({ toast: null });
+  });
+
+  it("reports the real failure, not the fallback notice, when the native fallback itself fails", () => {
+    // pipEntry can produce THREW with fellBackFrom still set: the enhanced
+    // window failed, native was tried as a rescue, and native ALSO failed. The
+    // user got no window at all here, so the actionable failure code must win
+    // over the (silent-except-for-fallback) ENHANCED_UNAVAILABLE notice.
+    const out = decideOutcome([
+      { frame: "TOP", acted: true, winner: null, candidates: [], mode: "native",
+        fellBackFrom: "document", outcome: "THREW", errorName: "NotAllowedError" },
+    ]);
+    expect(out.toast).toBe("PIP_REFUSED");
+  });
+});
