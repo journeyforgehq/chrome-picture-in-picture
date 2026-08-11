@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Typography, Switch, Select, Button, Alert, Space } from "antd";
 import {
   PlanBadge,
@@ -117,6 +117,45 @@ const STYLES = `
   .pip-options .ant-form-inline { row-gap: 8px; }
 }
 
+/* ============================================================================
+ * THE ENHANCED-WINDOW DISCLOSURE PANEL (see DpipDisclosure below for why it
+ * exists at all). The only rule here that is load-bearing rather than cosmetic
+ * is the image sizing.
+ *
+ * The comparison image is inherently WIDE — it is two browser windows side by
+ * side — and this page is a 560px column that must not scroll sideways at
+ * 375px. So the image is a block at width:100% with height:auto: it scales
+ * DOWN into whatever column it is given and can never push the column out.
+ * An intrinsic-width img, or one with a min-width, would do the opposite, and
+ * the resulting horizontal scroll is invisible to every DOM assertion in this
+ * repo (documented in options-visual.spec.ts, which measures scrollWidth for
+ * exactly this reason).
+ * ==========================================================================*/
+.pip-options__disclosure {
+  margin: 4px 0 0;
+  padding: 16px;
+  border: 1px solid var(--ant-color-primary, #1677ff);
+  border-radius: 8px;
+  background: rgba(22, 119, 255, 0.04);
+  outline: none;
+}
+.pip-options__disclosure-figure { margin: 0 0 12px; }
+.pip-options__disclosure-img {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  border: 1px solid rgba(5, 5, 5, 0.15);
+}
+.pip-options__disclosure-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+}
+
 .pip-options a:focus,
 .pip-options button:focus,
 .pip-options input:focus,
@@ -159,6 +198,124 @@ function Row({
   );
 }
 
+/* ============================================================================
+ * The comparison image, relative to options.html.
+ *
+ * webpack copies src/static/ to the build root and options.html is emitted
+ * there too, so this bare filename resolves in the packaged extension AND in
+ * the preview gallery (webpack.preview.cjs copies the same directory for that
+ * reason). No web_accessible_resources entry is needed: the options page is
+ * itself an extension page loading a same-package file.
+ *
+ * THE FILE IN THE TREE IS A PLACEHOLDER — an 80-byte flat magenta rectangle,
+ * deliberately hideous. The real asset is two screenshots composited by a
+ * human; scripts/check-assets.mjs blocks `npm run build:zip` until one exists,
+ * and its failure message is the instructions. Do not "improve" the
+ * placeholder: something that looks like a screenshot passes review by looking
+ * finished and then ships.
+ * ==========================================================================*/
+const COMPARISON_IMAGE = "pro-window-comparison.png";
+
+/* ============================================================================
+ * THE DISCLOSURE PANEL — the paywall's honesty, and the reason this product is
+ * not the competitor it is positioned against.
+ * ============================================================================
+ *
+ * The Pro tier is a Document PiP "enhanced window". Its one cost is imposed by
+ * Chrome and is permanent: a 34px title bar showing the page's domain, which
+ * no CSS can remove. SuperPiP (3.8 stars) shipped that bar silently as the
+ * default; its reviews say the site-address border is insufferable.
+ *
+ * So this panel is interposed: Unlock -> disclosure -> upgrade. Nothing on the
+ * Free page reaches checkout without passing through it. A user who reads this
+ * and declines keeps the chrome-free standard window, which is the default and
+ * always will be.
+ *
+ * THE WORDS CARRY IT, NOT THE IMAGE. The caption states the title bar and the
+ * domain in prose, because the image is invisible to a screen reader, to a
+ * user who blocks images, and to anyone on a connection where it has not
+ * loaded yet. If the only honest thing on screen is a picture, the disclosure
+ * is conditional on a rendering — which is not a disclosure.
+ * ==========================================================================*/
+function DpipDisclosure({
+  onContinue,
+  onDismiss,
+}: {
+  onContinue: () => void;
+  onDismiss: () => void;
+}) {
+  const ref = useRef<HTMLElement>(null);
+
+  /* Both entry points open this panel, and one of them — the "Upgrade" button
+   * in the plan row — sits BELOW it on the page. Without moving focus, that
+   * user's screen reader and viewport both stay where they were and the panel
+   * they just asked for is announced to nobody. tabIndex={-1} makes the region
+   * focusable for this purpose only; it is not in the tab order.
+   * scrollIntoView is optional-called because happy-dom does not implement it. */
+  useEffect(() => {
+    ref.current?.focus();
+    ref.current?.scrollIntoView?.({ block: "nearest" });
+  }, []);
+
+  return (
+    <section
+      ref={ref}
+      data-testid="dpip-disclosure"
+      className="pip-options__disclosure"
+      tabIndex={-1}
+      aria-labelledby="dpip-disclosure-heading"
+    >
+      <Title id="dpip-disclosure-heading" level={3} style={{ margin: 0, fontSize: 15 }}>
+        Before you upgrade: the enhanced window has a title bar
+      </Title>
+
+      <Paragraph type="secondary" style={{ margin: "4px 0 12px", fontSize: 13 }}>
+        Both windows, on the same video, at the same size.
+      </Paragraph>
+
+      <figure className="pip-options__disclosure-figure">
+        <img
+          className="pip-options__disclosure-img"
+          src={COMPARISON_IMAGE}
+          alt="Two floating windows side by side: on the left the standard window, showing only the video with no title bar; on the right the enhanced window, with a title bar across its top showing the site's domain."
+        />
+      </figure>
+
+      {/* The trade, in words. Deliberately not a bullet list of benefits with
+        * the cost tucked underneath — the cost is a full sentence of its own,
+        * in the same voice and the same size as the gains. */}
+      <Paragraph style={{ margin: "0 0 8px", fontSize: 13 }}>
+        <Text strong>What you gain.</Text> The enhanced window opens at the exact size you pick, and
+        it can remember a different size for each site. Playback controls and subtitles are drawn
+        inside the window itself, so they are there when you need them.
+      </Paragraph>
+
+      <Paragraph style={{ margin: "0 0 8px", fontSize: 13 }}>
+        <Text strong>What it costs.</Text> The enhanced window carries a title bar across its top
+        showing the site&apos;s domain — the web address of the page the video came from. Chrome
+        draws that bar itself. It is about 34 pixels tall, it is always there, and{" "}
+        <Text strong>no setting in this extension and no stylesheet can remove it</Text>. That is the
+        whole trade.
+      </Paragraph>
+
+      <Paragraph style={{ margin: "0 0 12px", fontSize: 13 }}>
+        <Text strong>If you would rather not.</Text> The standard floating window has no title bar
+        at all. It stays the default, it keeps working exactly as it does today, and nothing about
+        it changes if you decide against Pro.
+      </Paragraph>
+
+      <div className="pip-options__disclosure-actions">
+        <Button type="primary" data-testid="dpip-disclosure-continue" onClick={onContinue}>
+          Continue to upgrade
+        </Button>
+        <Button type="link" data-testid="dpip-disclosure-dismiss" onClick={onDismiss}>
+          No thanks — keep the standard window
+        </Button>
+      </div>
+    </section>
+  );
+}
+
 /**
  * The extension's only page. Purely presentational: options.tsx owns every
  * chrome.* call, and in particular owns calling chrome.permissions.request
@@ -174,6 +331,18 @@ function Row({
  * see what Pro contains has no reason to want it, and the enhanced window's
  * one real trade-off (a title bar) belongs on the row itself rather than only
  * inside a paywall they may never open.
+ *
+ * ON FREE, NOTHING REACHES CHECKOUT WITHOUT PASSING THE DISCLOSURE. Both
+ * entry points — LockedFeature's Unlock overlay and the plan row's Upgrade
+ * button — open DpipDisclosure; only its own "Continue to upgrade" calls
+ * onOpenPaywall. That indirection is the point of this task: previously both
+ * buttons opened the paywall directly, so the extension asked for money before
+ * it had ever named the title bar the buyer is agreeing to.
+ *
+ * `disclosureShown` is the ONLY state in this otherwise purely presentational
+ * component, and it stays here rather than being lifted to options.tsx because
+ * it is not persisted, not read by anything else, and involves no chrome.*
+ * call — lifting it would put presentation state in the container for nothing.
  */
 export function OptionsView({
   tier,
@@ -194,6 +363,13 @@ export function OptionsView({
   sourceUrl,
   siteAccessDenied = false,
 }: OptionsViewProps) {
+  const [disclosureShown, setDisclosureShown] = useState(false);
+  const locked = tier !== "pro";
+  /* Guarded on `locked` as well as the flag: if the tier resolves to pro while
+   * the panel is open (a restore landing, the entitlement refresh returning),
+   * the gate it belongs to has gone and so should it. */
+  const showDisclosure = locked && disclosureShown;
+
   return (
     <div className="pip-options">
       <style>{STYLES}</style>
@@ -263,7 +439,7 @@ export function OptionsView({
         }
       />
 
-      <LockedFeature locked={tier !== "pro"} onUnlock={onOpenPaywall}>
+      <LockedFeature locked={locked} onUnlock={() => setDisclosureShown(true)}>
         <Row
           label="Enhanced window"
           help={
@@ -357,6 +533,16 @@ export function OptionsView({
         />
       </LockedFeature>
 
+      {/* Directly under the rows it explains, so the user can look from the
+        * claim to the control and back. Rendered only once asked for: on first
+        * paint the page is settings, not a sales pitch. */}
+      {showDisclosure ? (
+        <DpipDisclosure
+          onContinue={onOpenPaywall}
+          onDismiss={() => setDisclosureShown(false)}
+        />
+      ) : null}
+
       <Row
         label="Your plan"
         wide
@@ -369,8 +555,13 @@ export function OptionsView({
         <Space direction="vertical" size="small" style={{ width: "100%" }}>
           <PaymentNudge status={status} manageHref={manageBillingHref} />
           <PlanBadge plan={plan} status={status} />
+          {/* Opens the DISCLOSURE, not the paywall. This button is the second
+            * route to checkout and it sells exactly the same thing the locked
+            * rows do, so it owes the buyer the same trade-off first. Its label
+            * and its free-only visibility are unchanged — several e2e specs
+            * use "Upgrade" as the tier indicator. */}
           {tier === "free" ? (
-            <Button type="primary" onClick={onOpenPaywall}>
+            <Button type="primary" onClick={() => setDisclosureShown(true)}>
               Upgrade
             </Button>
           ) : null}

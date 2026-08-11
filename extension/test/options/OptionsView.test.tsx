@@ -207,9 +207,19 @@ describe("OptionsView — your plan row", () => {
     expect(screen.queryByText(/payment issue/i)).not.toBeInTheDocument();
   });
 
-  it("offers Upgrade on the free tier", () => {
+  /* Upgrade no longer opens the paywall DIRECTLY, and that is the whole point
+   * of the disclosure panel: this button sells the same enhanced window the
+   * locked rows do, so it owes the buyer the title-bar trade first. It opens
+   * the disclosure; the disclosure's own CTA opens the paywall. The full
+   * unreachable-before-disclosure invariant is asserted in
+   * test/options/dpip-disclosure.test.tsx. */
+  it("offers Upgrade on the free tier, routed through the disclosure", () => {
     const props = renderOptions({ tier: "free" });
     fireEvent.click(screen.getByRole("button", { name: /^upgrade$/i }));
+    expect(screen.getByTestId("dpip-disclosure")).toBeInTheDocument();
+    expect(props.onOpenPaywall).not.toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId("dpip-disclosure-continue"));
     expect(props.onOpenPaywall).toHaveBeenCalledTimes(1);
   });
 

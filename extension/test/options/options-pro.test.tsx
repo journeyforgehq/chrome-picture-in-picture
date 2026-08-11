@@ -65,10 +65,18 @@ describe("Pro rows", () => {
     expect(onSettingChange).not.toHaveBeenCalled();
   });
 
-  it("routes a locked row's Unlock button to the paywall", async () => {
+  /* Unlock -> DISCLOSURE -> paywall, not Unlock -> paywall. The enhanced
+   * window's cost is a title bar Chrome draws and nobody can remove; asking for
+   * money before naming it is what this indirection exists to prevent. See
+   * test/options/dpip-disclosure.test.tsx for the panel's own coverage. */
+  it("routes a locked row's Unlock button to the disclosure, and only then to the paywall", async () => {
     const onOpenPaywall = vi.fn();
     render(<OptionsView {...base} tier="free" onOpenPaywall={onOpenPaywall} />);
     await userEvent.click(screen.getAllByRole("button", { name: /unlock/i })[0]);
+    expect(screen.getByTestId("dpip-disclosure")).toBeInTheDocument();
+    expect(onOpenPaywall).not.toHaveBeenCalled();
+
+    await userEvent.click(screen.getByTestId("dpip-disclosure-continue"));
     expect(onOpenPaywall).toHaveBeenCalled();
   });
 

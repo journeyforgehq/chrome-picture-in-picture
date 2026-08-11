@@ -54,6 +54,13 @@ const ALLOWED = new Set([
   "icons/icon-16.png",
   "icons/icon-48.png",
   "icons/icon-128.png",
+  // The standard-vs-enhanced window comparison the Pro disclosure panel shows
+  // (OptionsView's DpipDisclosure). Loaded by options.html from the package
+  // root, so it must be IN the archive — but the copy in the tree is an
+  // 80-byte placeholder, and scripts/check-assets.mjs blocks `npm run
+  // build:zip` until a human replaces it. This entry says the file belongs in
+  // the archive; that gate says which version of it may go there.
+  "pro-window-comparison.png",
 ]);
 
 /** The four things Chrome loads. Missing any of them = a broken upload. */

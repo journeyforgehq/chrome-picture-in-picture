@@ -240,6 +240,94 @@ for (const vp of [
     await expect(embedded).toHaveCSS("outline-width", "0px");
 
     await expect(card).toHaveScreenshot(`options-free-${vp.name}.png`);
+
+    /* ======================================================================
+     * THE Pro DISCLOSURE PANEL — Unlock -> disclosure -> upgrade.
+     * ======================================================================
+     *
+     * Deliberately AFTER the baseline screenshot above, so the default-state
+     * shot stays the state a user first sees and nothing here can leak into
+     * it.
+     *
+     * What only a browser can answer, and what this asserts:
+     *
+     *  - THE IMAGE ACTUALLY LOADED. `naturalWidth` is 0 for a broken <img>,
+     *    and a broken <img> is invisible to every DOM assertion in the unit
+     *    suite: the element is present, the alt text is present, the test is
+     *    green, and the panel's entire visual argument is a missing-image
+     *    icon. This is also what would catch webpack.preview.cjs losing its
+     *    CopyPlugin, or the file being renamed out from under the src.
+     *
+     *  - IT SCALES INSTEAD OF OVERFLOWING. The comparison image is two
+     *    browser windows side by side — inherently wide — and this page is a
+     *    560px column that must not scroll sideways at 375px. scrollWidth is
+     *    re-measured WITH the panel open, because the check at the top of
+     *    this test ran with it closed and would not see this regression.
+     * ====================================================================*/
+    await card.getByRole("button", { name: /unlock/i }).click();
+    await page.mouse.move(0, 0);
+
+    const panel = card.getByTestId("dpip-disclosure");
+    await expect(panel).toBeVisible();
+    await expect(panel).toHaveCSS("display", "block");
+    await expect(panel).toHaveCSS("border-top-color", ACCENT);
+    await expect(panel).toHaveCSS("border-top-width", "1px");
+
+    const img = panel.locator("img.pip-options__disclosure-img");
+    await expect(img).toBeVisible();
+    await expect(img).toHaveCSS("display", "block");
+
+    const imgState = await img.evaluate((el: HTMLImageElement) => ({
+      complete: el.complete,
+      naturalWidth: el.naturalWidth,
+      naturalHeight: el.naturalHeight,
+      rendered: el.getBoundingClientRect().width,
+    }));
+    // eslint-disable-next-line no-console
+    console.log(`[${vp.name}] comparison image: ${JSON.stringify(imgState)}`);
+    expect(imgState.complete).toBe(true);
+    expect(imgState.naturalWidth).toBeGreaterThan(0);
+
+    // It scales DOWN into the column: rendered width never exceeds the panel's
+    // content box, whatever the intrinsic width happens to be.
+    const panelBox = (await panel.boundingBox())!;
+    const imgBox = (await img.boundingBox())!;
+    // eslint-disable-next-line no-console
+    console.log(`[${vp.name}] image ${JSON.stringify(imgBox)} inside panel ${JSON.stringify(panelBox)}`);
+    expect(imgBox.x).toBeGreaterThanOrEqual(panelBox.x - 1);
+    expect(imgBox.x + imgBox.width).toBeLessThanOrEqual(panelBox.x + panelBox.width + 1);
+
+    // The 375px requirement, re-measured with the wide image on screen.
+    const openScrollWidth = await page.evaluate(() => document.documentElement.scrollWidth);
+    // eslint-disable-next-line no-console
+    console.log(`[${vp.name}] scrollWidth with the disclosure open: ${openScrollWidth} (viewport ${vp.width})`);
+    expect(openScrollWidth).toBeLessThanOrEqual(vp.width);
+
+    // The words carry the disclosure, not the image — so they must be VISIBLE,
+    // not merely in the DOM behind a collapsed container.
+    await expect(panel.getByText(/title bar/i).first()).toBeVisible();
+    await expect(panel.getByText(/domain/i).first()).toBeVisible();
+    await expect(panel.getByText(/standard floating window has no title bar/i)).toBeVisible();
+
+    // Still no money question. The paywall is downstream of this panel.
+    await expect(page.locator(".ant-modal-mask")).toBeHidden();
+
+    await expect(panel).toHaveScreenshot(`dpip-disclosure-${vp.name}.png`);
+
+    /* ---- and the CTA really does reach the paywall from here -------------
+     * The unit suite proves onOpenPaywall fires. This proves the modal it
+     * opens actually paints, from this button, in a browser. */
+    await panel.getByTestId("dpip-disclosure-continue").click();
+    await expect(page.locator(".ant-modal-mask")).toBeVisible();
+    const upsell = page.getByRole("dialog", { name: /upgrade to pro/i });
+    await expect(upsell).toBeVisible();
+    await upsell.locator(".ant-modal-close").click();
+    await expect(page.locator(".ant-modal-mask")).toBeHidden();
+
+    // Declining costs nothing: the panel closes and the free page is as it was.
+    await panel.getByTestId("dpip-disclosure-dismiss").click();
+    await expect(panel).toHaveCount(0);
+    await expect(card.getByRole("button", { name: /unlock/i })).toBeVisible();
   });
 
   /* ==========================================================================

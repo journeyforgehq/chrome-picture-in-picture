@@ -6,7 +6,8 @@
   "scripts": {
     "build": "webpack --config webpack/webpack.prod.cjs",
     "build:dev": "webpack --config webpack/webpack.dev.cjs",
-    "build:zip": "npm run build && node scripts/zip-dist.mjs",
+    "build:zip": "npm run check:assets && npm run build && node scripts/zip-dist.mjs",
+    "check:assets": "node scripts/check-assets.mjs",
     "watch": "webpack --watch --config webpack/webpack.dev.cjs",
     "start": "webpack --watch --config webpack/webpack.dev.cjs",
     "start:staging": "cross-env APP_ENV=staging webpack --watch --config webpack/webpack.dev.cjs",

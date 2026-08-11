@@ -162,8 +162,13 @@ describe("Options container", () => {
     render(<Options />);
     await waitFor(() => expect(refreshMock).toHaveBeenCalled());
 
-    // Free tier → the Upgrade button is the only route into the paywall.
+    // Free tier → Upgrade opens the DISCLOSURE, and the disclosure's own CTA is
+    // what reaches the paywall. Both clicks are load-bearing: if the first one
+    // ever opens the paywall directly again, the second findByRole below is the
+    // one that would still pass, so the panel's presence is asserted between
+    // them rather than inferred.
     fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    fireEvent.click(await screen.findByTestId("dpip-disclosure-continue"));
     fireEvent.click(await screen.findByRole("button", { name: planCta }));
 
     expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
@@ -184,6 +189,7 @@ describe("Options container", () => {
     await waitFor(() => expect(refreshMock).toHaveBeenCalled());
 
     fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    fireEvent.click(await screen.findByTestId("dpip-disclosure-continue"));
     fireEvent.click(await screen.findByRole("button", { name: planCta }));
 
     expect(open).toHaveBeenCalledWith(
