@@ -19,11 +19,33 @@ already brings.
   - `renewal-cascade.spec.ts` — two independent installs renewed and revoked together
   - `restore.spec.ts` — restore a lifetime purchase onto a second device by email
 
+  **Expected: `12 passed`, nothing skipped.**
+
   There is **no popup**: the toolbar button is the feature, so every spec above
   that needs to read tier state does it on `options.html` via
-  `[data-testid="tier-badge"]`. Four `test.fixme` tests named `PLAN 2: …` are
-  parked, not broken — they hold the Pro-gating assertions until the paid tier
-  adds a gated surface to assert against.
+  `[data-testid="tier-badge"]`.
+
+  Four of the twelve are the **Pro-gating** tests, one per money-path spec. They
+  were parked as `test.fixme` named `PLAN 2: …` for as long as the extension had
+  no Pro-gated surface; the options page now has one — four Pro rows (enhanced
+  window, window size, in-window controls, subtitles) wrapped in a single
+  `LockedFeature` — so they run. What they assert, and why in that form:
+
+  - `getByLabel("Enhanced window")` resolves the antd Switch's `<button
+    role="switch">`. Its **own** `disabled` property is `false` on free; the lock
+    is the ancestor `<fieldset disabled>`, and `toBeDisabled()` honours it.
+    Measured, not assumed.
+  - The dimming is asserted as `toHaveCSS("opacity", "0.5")` — a **computed**
+    value, because `opacity` is an inline style set by the CORE `LockedFeature`
+    and `OptionsView`'s `!important` child rules override `padding` /
+    `align-items` on the same elements. A DOM-presence check would not notice
+    either going wrong.
+  - `.ui-kit-locked-feature fieldset` matches **exactly one** element (there is
+    one `LockedFeature`), which is asserted rather than papered over with
+    `.first()`.
+  - Both halves are asserted. `billing.spec.ts` checks the rows **unlock** after
+    the grant, not just that they are locked on free — a locked-only test passes
+    just as green on a build where they never unlock.
 
 - **Granted-permission (`npm run e2e:granted`)** —
   `playwright.granted.config.ts`. Needs one thing nothing else brings: a loaded

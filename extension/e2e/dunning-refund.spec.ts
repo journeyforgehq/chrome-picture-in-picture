@@ -103,21 +103,78 @@ test("past_due shows the nudge but keeps Pro; refund re-locks", async ({ ext }) 
 });
 
 /* ============================================================================
- * PARKED — not deleted, not softened. See the identical block in
+ * UN-PARKED (was `test.fixme("PLAN 2: …")`). See the matching block in
  * e2e/billing.spec.ts and gaps 1-2 of
  * docs/superpowers/plans/decisions-picture-in-picture.md.
  *
- * The refund half of this spec used to end on `LockedFeature` re-locking
- * (`.ui-kit-locked-feature fieldset` back to opacity 0.5 + `disabled === true`).
- * v1 free has no Pro-gated production surface; plan 2 restores one.
+ * The refund half of this spec used to end on `LockedFeature` re-locking; the
+ * subject is now the four Pro rows on options.html.
+ *
+ * past_due and refunded are DIFFERENT states and this test exists to keep them
+ * different: a failed payment must nag without taking the feature away, a
+ * refund must take it away. Collapsing either into the other is a real bug that
+ * the tier badge alone cannot see.
  * ==========================================================================*/
-test.fixme("PLAN 2: a refund re-locks the Pro-gated options rows", async ({ ext }) => {
+test("past_due keeps the Pro-gated rows interactive; a refund re-locks them", async ({ ext }) => {
   const page = await ext.context.newPage();
   await page.goto(optionsUrl(ext.extensionId));
+  const tierBadge = page.locator('[data-testid="tier-badge"]');
+
+  // --- 1. Free baseline: the rows start locked. ---
+  await expect(tierBadge).toHaveText("Free");
+  await expect(page.getByLabel("Enhanced window")).toBeDisabled();
+
+  const deviceId = await waitForDeviceId(page);
+  expect(deviceId).not.toBe("");
+
+  // --- 2. Grant Pro → rows unlocked, no nudge. ---
+  const grant = await postWebhook(
+    WORKER_BASE_URL,
+    checkoutCompleted({ deviceId, customerId: E2E_CUSTOMER_ID, subId: E2E_SUB_ID }),
+    STRIPE_WEBHOOK_SECRET,
+  );
+  expect(grant.status).toBe(200);
+
+  await page.reload();
+  await expect(tierBadge).toHaveText("Pro");
+  await expect(page.getByLabel("Enhanced window")).toBeEnabled();
+  await expect(page.locator(".ui-kit-locked-feature fieldset")).toHaveCount(0);
+  await expect(page.getByText("Payment issue")).toHaveCount(0);
+
+  // --- 3. Dunning: past_due NAGS but does not take the feature away. ---
+  const dunning = await postWebhook(
+    WORKER_BASE_URL,
+    invoicePaymentFailed({ customerId: E2E_CUSTOMER_ID }),
+    STRIPE_WEBHOOK_SECRET,
+  );
+  expect(dunning.status).toBe(200);
+
+  await page.reload();
+  await expect(tierBadge).toHaveText("Pro");
+  await expect(page.getByText("Payment issue")).toBeVisible();
+  // The point of the row: nudged AND still interactive, simultaneously.
+  await expect(page.getByLabel("Enhanced window")).toBeEnabled();
+  await expect(page.locator(".ui-kit-locked-feature fieldset")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /unlock/i })).toHaveCount(0);
+
+  // --- 4. Refund → the rows re-lock. ---
+  const refund = await postWebhook(
+    WORKER_BASE_URL,
+    chargeRefunded({ customerId: E2E_CUSTOMER_ID }),
+    STRIPE_WEBHOOK_SECRET,
+  );
+  expect(refund.status).toBe(200);
+
+  await page.reload();
+  await expect(tierBadge).toHaveText("Free");
+  await expect(page.getByLabel("Enhanced window")).toBeDisabled();
 
   const lockedFieldset = page.locator(".ui-kit-locked-feature fieldset");
+  await expect(lockedFieldset).toHaveCount(1);
+  // Computed, not declared — see the note in billing.spec.ts.
   await expect(lockedFieldset).toHaveCSS("opacity", "0.5");
-  expect(await lockedFieldset.evaluate((el: HTMLFieldSetElement) => el.disabled)).toBe(true);
+  await expect(page.getByRole("button", { name: /unlock/i })).toBeVisible();
+  await page.screenshot({ path: resolve(SCREENSHOT_DIR, "refund-rows-relocked.png") });
 
   await page.close();
 });

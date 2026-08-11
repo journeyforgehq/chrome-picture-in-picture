@@ -110,9 +110,11 @@ STAGING_STRIPE_WEBHOOK_SECRET="<the worker's STRIPE_WEBHOOK_SECRET>" \
 npm run e2e:staging
 ```
 
-**Expected: 8 passed, 4 skipped.** The four skips are the parked `PLAN 2:` fixmes —
-`LockedFeature`'s gating assertions, which have no production mount until the Pro rows
-exist. They are skipped on local runs too; four skips is correct, not a staging problem.
+**Expected: 12 passed, 0 skipped.** Any skip is now a symptom, not a known state. The
+four `PLAN 2:` fixmes that used to account for `4 skipped` were un-parked once the
+options page grew the four Pro rows: `LockedFeature`'s gating assertions have a
+production mount, so they run as ordinary tests on staging exactly as they do locally.
+If you are reading an older note that says `8 passed, 4 skipped`, it predates that.
 
 `globalSetup` does **not** spawn wrangler on staging. It calls `resetStaging()` and then a
 grant probe: forge a `checkout.session.completed`, confirm `/me` reports pro. If that probe
@@ -147,6 +149,18 @@ If exactly `restore.spec.ts` fails on staging while the other five pass, look he
 ladder and break the lifetime assertions — with a symptom that looks like a backend bug.
 Check `git diff` on `src/billing/plans.ts` before blaming the worker.
 
+**5.4 — The four Pro-gating tests are new and have only met a local worker.** They are
+the ones that used to be the `4 skipped`. They assert a *rendered* consequence of the
+entitlement — `getByLabel("Enhanced window")` disabled via its ancestor `<fieldset>`,
+that fieldset's computed `opacity: 0.5`, and the `Unlock` button — rather than the tier
+badge's text, so they fail on a class of bug the other eight cannot see: a cascade that
+updates the badge but leaves the feature usable.
+
+They are also the ones most likely to fail for a **non-billing** reason, because they
+depend on `OptionsView`'s `LockedFeature` mount as well as on `/me`. Discriminator: if
+the tier badge assertions in the same file pass and only the gating ones fail, the
+worker is fine and the options page changed.
+
 ---
 
 ## 6. Triage
@@ -158,7 +172,8 @@ Check `git diff` on `src/billing/plans.ts` before blaming the worker.
 | Every `/__test__/*` 404s | `E2E_SEED_SECRET` not set **on the worker** (setting it only in the shell is not enough) |
 | `restore.spec.ts` alone fails on the plan label | §5.2 — the mode→label derivation |
 | All six fail on `tier-badge` not found | §5.1 — the options-page repoint, not the backend |
-| 4 skipped | Correct. Parked `PLAN 2:` fixmes |
+| Any skip at all | **Not** correct any more. The four `PLAN 2:` fixmes were un-parked; a skip means a `test.fixme`/`test.skip` crept back in, or a `--grep` is set |
+| The four Pro-gating tests fail on `opacity` or `toBeDisabled` | The options page's `LockedFeature` mount, not the worker — the tier badge would be failing too if it were billing |
 | Deploy refused before uploading | `check-placeholders.mjs` — the `[env.staging]` KV id is still `REPLACE_WITH_STAGING_KV_ID` |
 
 ---
@@ -182,7 +197,7 @@ exactly the operation that would make a concurrent run flaky.
 - [ ] `E2E_SEED_SECRET` set on the **staging** worker — and confirmed **absent** on production
 - [ ] `STRIPE_WEBHOOK_SECRET` set on the staging worker (real test-mode value)
 - [ ] `npm run deploy:staging` green, including its `health:check`
-- [ ] `npm run e2e:staging` → **8 passed, 4 skipped**
+- [ ] `npm run e2e:staging` → **12 passed, 0 skipped**
 - [ ] If green: record the worker URL and the run date here, and note that §5's three
       never-exercised paths are now exercised
 - [ ] If red: triage with §6 **before** changing any test — five of the twelve specs were
