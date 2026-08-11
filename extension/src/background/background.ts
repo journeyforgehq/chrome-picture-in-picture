@@ -2,7 +2,13 @@
 import { config } from "../billing/config";
 import { decideOutcome } from "./action";
 import { pickWinner, recordScore, pruneFrame, dropTab, type TabScores } from "./arbitrate";
-import { PIP_COORD, PIP_DPIP_CLOSED, PIP_SCORE_REPORT } from "../pip/messages";
+import {
+  PIP_COORD,
+  PIP_DPIP_CLOSED,
+  PIP_GEOMETRY_CHANGED,
+  PIP_SCORE_REPORT,
+} from "../pip/messages";
+import { rememberSize } from "../pip/geometry";
 import { pipEntry } from "../pip/entry";
 import type { PipEntryResult } from "../pip/entry";
 import { enhanceWindow } from "../pip/enhance";
@@ -192,6 +198,50 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
     const msg = message as { type?: string } | null;
     if (!msg || msg.type !== PIP_DPIP_CLOSED) return false;
     void clearActivePip();
+    return false;
+  });
+
+  /* THE USER RESIZED THE ENHANCED WINDOW. Sent by the debounced `resize`
+   * listener in src/pip/enhance.ts, once per drag, carrying the CONTENT size
+   * (S-12: `outer` includes the browser's own chrome, and storing that would
+   * re-add it on every open until the window had crept off the screen).
+   *
+   * Returns false: this is fire-and-forget storage work and the page is not
+   * waiting on an answer.
+   *
+   * NOT SERIALISED, unlike `arbitrationChain` above — and the difference is
+   * worth stating, because rememberSize IS a read-modify-write on one storage
+   * key and that is exactly the shape that chain exists to protect. Two of
+   * these cannot overlap: Chrome allows ONE Document PiP window at a time, and
+   * the page-side listener debounces to one message per drag with a 500ms
+   * trailing gap. Add a second sender for this message type and that argument
+   * is gone — chain it then, the way frame scores and the prefs cache are. */
+  chrome.runtime.onMessage.addListener((message) => {
+    const msg = message as { type?: string } | null;
+    if (!msg || msg.type !== PIP_GEOMETRY_CHANGED) return false;
+    const g = message as { origin?: unknown; w?: unknown; h?: unknown };
+    const origin = g.origin;
+    const w = g.w;
+    const h = g.h;
+    // The payload crosses a process boundary from a page-injected function; a
+    // malformed one must not reach storage. rememberSize normalises the numbers
+    // (clamped to 240x135 … 1920x1080, non-finite rejected) — this only has to
+    // establish that they ARE numbers and that there is an origin to key on.
+    if (typeof origin !== "string" || !origin) return false;
+    if (typeof w !== "number" || typeof h !== "number") return false;
+    void (async () => {
+      const settings = await getSettings();
+      /* THE WRITE HALF OF THE rememberSizePerSite INVARIANT — and it is NOT
+       * redundant with the read-side check in src/pip/entry.ts. Read the
+       * capitalised comment there before deleting either one: the read side
+       * exists because entries written while this setting was ON survive being
+       * turned off, so a persistence-only gate would silently mean "stop
+       * recording new sizes" while the user asked for "stop using per-site
+       * sizes" — and the preset dropdown would look dead on every site they had
+       * ever resized. This side exists because the user asking us to stop
+       * remembering must actually stop us writing. */
+      if (settings.rememberSizePerSite) await rememberSize(origin, { w, h });
+    })();
     return false;
   });
 

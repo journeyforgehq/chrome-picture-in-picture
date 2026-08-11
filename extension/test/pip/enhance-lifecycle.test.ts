@@ -30,7 +30,17 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { enhanceWindow } from "../../src/pip/enhance";
-import { PIP_DPIP_CLOSED } from "../../src/pip/messages";
+import { PIP_DPIP_CLOSED, PIP_GEOMETRY_CHANGED } from "../../src/pip/messages";
+
+/** Every `{ type: "..." }` enhance.ts SHIPS, in source order. Reads the source
+ *  rather than calling the function because each send sits inside a branch that
+ *  needs a whole DOM, a chrome stub and a timer to reach — and because the
+ *  property being pinned is textual: what gets serialized into the page. */
+function shippedMessageTypes(): string[] {
+  const here = dirname(fileURLToPath(import.meta.url));
+  const src = readFileSync(join(here, "../../src/pip/enhance.ts"), "utf8");
+  return Array.from(src.matchAll(/sendMessage\(\s*\{\s*type:\s*"([^"]+)"/g)).map((m) => m[1]);
+}
 
 function fakeWin() {
   const doc = document.implementation.createHTMLDocument("pip");
@@ -176,23 +186,35 @@ describe("enhanced-window lifecycle", () => {
   });
 });
 
-describe("the DPIP_CLOSED contract — one string, two spellings", () => {
-  it("the literal enhance.ts SHIPS equals the constant background.ts IMPORTS", () => {
+describe("the message contract — one string, two spellings, twice over", () => {
+  it("the DPIP_CLOSED literal enhance.ts SHIPS equals the constant background.ts IMPORTS", () => {
     /* enhance.ts is serialized with Function.prototype.toString() and evaluated
      * in the page, so it may not reference the exported constant (rule 1) — it
      * inlines the string. That is two spellings of one contract, exactly the
      * duplication Task 8 flagged for geometry.ts: change one and the worker
      * simply stops hearing about closed windows, with every test still green
-     * and the only symptom a toolbar button that intermittently does nothing.
-     *
-     * Reads the SOURCE rather than calling the function because the send is
-     * inside a branch that needs a whole DOM and a chrome stub to reach, and
-     * because the property being pinned is textual: what gets SHIPPED. */
-    const here = dirname(fileURLToPath(import.meta.url));
-    const src = readFileSync(join(here, "../../src/pip/enhance.ts"), "utf8");
-    const m = src.match(/sendMessage\(\s*\{\s*type:\s*"([^"]+)"/);
-    expect(m, "enhance.ts sends no { type: \"...\" } message at all").toBeTruthy();
-    expect(m![1]).toBe(PIP_DPIP_CLOSED);
+     * and the only symptom a toolbar button that intermittently does nothing. */
+    const types = shippedMessageTypes();
+    expect(types.length, 'enhance.ts sends no { type: "..." } message at all').toBeGreaterThan(0);
+    expect(types).toContain(PIP_DPIP_CLOSED);
+  });
+
+  it("the GEOMETRY_CHANGED literal enhance.ts SHIPS equals the constant background.ts IMPORTS", () => {
+    /* The same duplication, one release later, and its failure is quieter still:
+     * misspell this literal and resizes are simply never persisted. Nothing
+     * errors, the window still opens, and the paid promise — "remembers the size
+     * for each site" — just stops being true. */
+    expect(shippedMessageTypes()).toContain(PIP_GEOMETRY_CHANGED);
+  });
+
+  it("ships NO OTHER message type — a third one would escape both checks above", () => {
+    /* `toContain` can only police the strings it is told about. Without this,
+     * the next inlined send would be pinned by nothing at all, which is exactly
+     * how the first two came to need pinning. Adding a type here is a two-line
+     * change; forgetting to is a silent contract break. */
+    expect(new Set(shippedMessageTypes())).toEqual(
+      new Set([PIP_DPIP_CLOSED, PIP_GEOMETRY_CHANGED])
+    );
   });
 
   it("enhance.ts still imports nothing at runtime", () => {

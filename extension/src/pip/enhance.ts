@@ -66,8 +66,13 @@
  *    every failure, because a sleeping worker must not be able to strand the
  *    user's <video> in a window that is going away.
  *
- * SCOPE. Resize persistence is Task 12 and gets its own visual verification,
- * which is why the plan splits it out.
+ * 7. RESIZE IS THE PAID FEATURE'S OTHER HALF. entry.ts opens the window at the
+ *    size this origin was last left at; the listener at the bottom of this file
+ *    is what records that size in the first place. It reports the CONTENT size
+ *    (S-12 — `outer` carries browser chrome, and storing it makes the window
+ *    creep larger on every reopen), debounced so one drag is one storage write,
+ *    and it is disarmed by restore rather than being left to fire against a
+ *    window that has closed.
  * ==========================================================================*/
 
 export interface EnhanceOptions {
@@ -268,9 +273,19 @@ export function enhanceWindow(input: { win?: Window | null; opts: EnhanceOptions
    * A closure flag, not a `__pipHome` check: the record is page-global and a
    * later session legitimately writes a new one. */
   let restored = false;
+  let resizeTimer: ReturnType<typeof setTimeout> | null = null;
   const restore = function () {
     if (restored) return;
     restored = true;
+    /* DISARM THE PENDING DRAG. Letting go of the corner and then closing the
+     * window inside half a second is an ordinary thing to do, and it leaves a
+     * timer already scheduled. Guarding the listener is not enough — this timer
+     * was armed BEFORE restore ran — and firing it would report a size for a
+     * window that is gone, against whatever origin the page has by then. */
+    if (resizeTimer !== null) {
+      clearTimeout(resizeTimer);
+      resizeTimer = null;
+    }
     if (detach) detach();
     const h = (window as unknown as { __pipHome?: { parent: Node | null; next: Node | null } })
       .__pipHome;
@@ -321,6 +336,63 @@ export function enhanceWindow(input: { win?: Window | null; opts: EnhanceOptions
     }
   };
   win.addEventListener("pagehide", restore);
+
+  /* ------------------------------------------------------------------------
+   * THE PAID FEATURE'S WRITE HALF: "remembers the size, for each site".
+   *
+   * A drag fires `resize` CONTINUOUSLY — tens of events a second, for as long
+   * as the user holds the corner. Debounced to the trailing edge so one drag is
+   * one storage write: the same shape as content.ts's SCORE_THROTTLE_MS and for
+   * the same reason (every message WAKES THE SERVICE WORKER, and the write is a
+   * read-modify-write on one storage key), and trailing rather than leading
+   * because the size the user LET GO at is the one worth remembering.
+   *
+   * `innerWidth`/`innerHeight` — THE CONTENT SIZE — and never `outer`. S-12
+   * measured requestWindow's `width`/`height` against both: `outer` comes back
+   * at requested + 34, so a stored outer size would be re-inflated by the title
+   * bar on the next open, and again on the one after that. The window would
+   * creep larger every time the user opened it on the sites they use most.
+   *
+   * `restored` is checked because `resize` and `pagehide` both fire during a
+   * teardown and their order is the browser's business; restore additionally
+   * CANCELS an already-armed timer, which this check cannot do.
+   *
+   * The type string is INLINED and the whole thing is wrapped, for the reasons
+   * spelled out at the PIP_DPIP_CLOSED send above: rule 1 forbids naming the
+   * exported constant from a body that ships as source text, a sleeping worker
+   * REJECTS, and an invalidated context THROWS synchronously. Neither may
+   * surface as an error in the user's page for a bookkeeping write.
+   * ----------------------------------------------------------------------*/
+  win.addEventListener("resize", function () {
+    if (restored) return;
+    if (resizeTimer !== null) clearTimeout(resizeTimer);
+    resizeTimer = setTimeout(function () {
+      resizeTimer = null;
+      if (restored) return;
+      try {
+        const c = (
+          window as unknown as {
+            chrome?: { runtime?: { id?: string; sendMessage?: (m: unknown) => unknown } };
+          }
+        ).chrome;
+        if (!c || !c.runtime || !c.runtime.id || !c.runtime.sendMessage) return;
+        const p = c.runtime.sendMessage({
+          type: "PIP_GEOMETRY_CHANGED",
+          origin: location.origin,
+          w: win.innerWidth,
+          h: win.innerHeight,
+        });
+        if (p && typeof (p as Promise<unknown>).catch === "function") {
+          (p as Promise<unknown>).catch(function () {
+            /* worker asleep; a size the user can re-choose is not worth an error */
+          });
+        }
+      } catch (_e) {
+        /* extension context invalidated */
+      }
+    }, 500);
+  });
+
   return { restore: restore };
 
   /* ------------------------------------------------------------------------

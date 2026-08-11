@@ -74,6 +74,8 @@ declare global {
     __pipWin?: Window;
     __lastResult?: PipEntryResult & { harnessError?: string };
     __lastSettled?: boolean;
+    /** Everything the page tried to send to the worker. See the resize test. */
+    __pipMessages?: { type?: string; origin?: string; w?: number; h?: number }[];
   }
 }
 
@@ -419,5 +421,129 @@ test.describe("the enhanced window @dpip", () => {
 
     const probe = await probeWindow(page);
     expect(probe.videoCount, `\n  probe: ${JSON.stringify(probe)}\n`).toBe(1);
+  });
+
+  test("a resize of the real window reports the CONTENT size to the worker", async ({
+    page,
+    context,
+  }) => {
+    /* ======================================================================
+     * WHAT THIS LAYER CAN PROVE, AND WHAT IT CANNOT. Read this before
+     * treating it as full coverage of the resize feature.
+     *
+     * CAN: that a REAL `resize` event on a REAL Document PiP window reaches
+     * the listener enhanceWindow registered, and that the size it reports is
+     * the one the browser reports as `inner` — not `outer`. That distinction
+     * is the entire point of the feature's storage format (S-12: `outer`
+     * carries a 34px title bar, so storing it makes the window creep larger on
+     * every reopen) and it can only be measured where a real window has real
+     * chrome. happy-dom has neither, so the unit test can only assert that the
+     * numbers came from the properties named `innerWidth`/`innerHeight`.
+     *
+     * CANNOT: that a USER-DRAGGED resize behaves the same way. There is no
+     * automation route to dragging the OS window frame of a PiP window —
+     * Playwright's input goes to the page, not to the window manager. This
+     * test resizes PROGRAMMATICALLY, which fires the same event but does not
+     * exercise the burst of events a drag produces. The debounce that turns
+     * that burst into one storage write is pinned by
+     * test/pip/enhance-resize.test.ts against fake timers, and by nothing
+     * here. A human dragging the corner and confirming the window reopens at
+     * that size is a manual-checkpoint row.
+     *
+     * The `chrome` stub below is the other honest limitation: this fixture is
+     * a plain page with no extension context, so the SEND is recorded rather
+     * than delivered. What happens to the message on the worker side is
+     * pinned in test/background/registration-wiring.test.ts, against the
+     * shipped bundle.
+     * ====================================================================*/
+    await open(page);
+    await openAndEnhance(page);
+
+    // Record what the page tries to send. Installed AFTER enhanceWindow ran,
+    // which is safe and deliberate: the listener reads `window.chrome` when the
+    // debounce fires, not when it is registered — so this also proves the send
+    // is not capturing a reference at registration time.
+    const installed = await page.evaluate(() => {
+      window.__pipMessages = [];
+      (window as unknown as { chrome: unknown }).chrome = {
+        runtime: {
+          id: "e2e",
+          sendMessage: (m: { type?: string }) => {
+            window.__pipMessages!.push(m);
+            return Promise.resolve();
+          },
+        },
+      };
+      return (window as unknown as { chrome?: { runtime?: { id?: string } } }).chrome?.runtime?.id;
+    });
+    // Loud, because a silently-failed stub would make the poll below time out
+    // with nothing to say about why.
+    expect(installed, "the recording chrome stub did not install on the page").toBe("e2e");
+
+    const pip = pipPage(context, page);
+    const before = await pip.evaluate(() => [window.innerWidth, window.innerHeight]);
+
+    /* THE RESIZE ITSELF. A click first, because Document PiP requires user
+     * activation for resizeBy — entry.ts spends the opening activation on its
+     * one corrective call, and a later one throws NotAllowedError without a
+     * fresh gesture. The click lands on the stage inside the PiP window, which
+     * is a real input event to that document. */
+    await pip.locator(".pip-stage").click({ position: { x: 5, y: 5 } });
+    const resized = await pip.evaluate(() => {
+      try {
+        window.resizeBy(80, 40);
+        return { ok: true, error: null };
+      } catch (e) {
+        return { ok: false, error: String(e) };
+      }
+    });
+    expect(
+      resized.ok,
+      `\n  window.resizeBy threw inside the PiP window: ${resized.error}\n` +
+        "  Document PiP resizeBy needs user activation; the click above is what\n" +
+        "  supplies it. If this starts failing, the click stopped landing.\n"
+    ).toBe(true);
+
+    /* POLLED, not read back synchronously. The window manager applies the size
+     * out of band: read immediately after the call and `inner` is still the old
+     * value, which measures the read timing rather than the resize. */
+    await expect
+      .poll(async () => await pip.evaluate(() => [window.innerWidth, window.innerHeight]), {
+        timeout: 5000,
+        message:
+          "resizeBy did not change the window's content size, so there is " +
+          "nothing for a resize listener to have heard",
+      })
+      .not.toEqual(before);
+    console.log(
+      `  resize: before ${JSON.stringify(before)} -> ` +
+        JSON.stringify(await pip.evaluate(() => [window.innerWidth, window.innerHeight]))
+    );
+
+    // The debounce is 500ms; poll rather than sleep so a faster path is not
+    // punished and a slower one is not flaky.
+    await expect
+      .poll(async () => (await page.evaluate(() => window.__pipMessages))?.length ?? 0, {
+        timeout: 5000,
+      })
+      .toBeGreaterThan(0);
+
+    const messages = (await page.evaluate(() => window.__pipMessages))!;
+    console.log(`  messages: ${JSON.stringify(messages)}`);
+    const geometry = messages.filter((m) => m.type === "PIP_GEOMETRY_CHANGED");
+    expect(geometry.length, `\n  messages: ${JSON.stringify(messages)}\n`).toBe(1);
+
+    const probe = await pip.evaluate(() => ({
+      inner: [window.innerWidth, window.innerHeight],
+      outer: [window.outerWidth, window.outerHeight],
+    }));
+    const ctx = `\n  reported: ${JSON.stringify(geometry[0])}\n  window: ${JSON.stringify(probe)}\n`;
+
+    // THE ASSERTION THIS TEST EXISTS FOR. `inner`, and demonstrably not `outer`
+    // — the second expect is what fails if someone "simplifies" the payload to
+    // the outer size, which every other assertion here would tolerate.
+    expect([geometry[0].w, geometry[0].h], ctx).toEqual(probe.inner);
+    expect([geometry[0].w, geometry[0].h], ctx).not.toEqual(probe.outer);
+    expect(geometry[0].origin, ctx).toBe("http://localhost:3000");
   });
 });

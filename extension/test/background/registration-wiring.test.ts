@@ -66,10 +66,18 @@ const BUNDLE = path.resolve(OUT_DIR, "background.js");
 interface Harness {
   onRemoved: (() => void) | null;
   onAdded: ((p: { origins?: string[] }) => void) | null;
+  /** EVERY runtime.onMessage listener the worker registered, in order. The
+   *  worker installs several and Chrome offers each message to all of them, so
+   *  a test that fired only one would be asserting against its own guess about
+   *  registration order rather than against the worker's behaviour. */
+  onMessage: ((m: unknown, sender: unknown, sendResponse: (v: unknown) => void) => unknown)[];
   calls: string[];
   unregisterFilters: unknown[];
   registerArgs: unknown[];
   settings: Record<string, unknown>;
+  /** chrome.storage.local, minus `settings` (which keeps its own field above so
+   *  the permission tests that predate this read the same way they always did). */
+  local: Record<string, unknown>;
 }
 
 /**
@@ -85,10 +93,12 @@ function loadWorker(): Harness {
   const h: Harness = {
     onRemoved: null,
     onAdded: null,
+    onMessage: [],
     calls: [],
     unregisterFilters: [],
     registerArgs: [],
     settings: {},
+    local: {},
   };
   let registered = [{ id: SCRIPT_ID }];
 
@@ -98,7 +108,11 @@ function loadWorker(): Harness {
   const chrome = {
     runtime: {
       onInstalled: { addListener: noop },
-      onMessage: { addListener: noop },
+      onMessage: {
+        addListener: (fn: Harness["onMessage"][number]) => {
+          h.onMessage.push(fn);
+        },
+      },
       onStartup: emitter(),
       setUninstallURL: noop,
       getManifest: () => ({ version: "0.0.0" }),
@@ -111,9 +125,24 @@ function loadWorker(): Harness {
       // would throw here rather than in anyone's browser.
       onChanged: emitter(),
       local: {
-        get: async () => ({ settings: h.settings }),
+        // KEY-AWARE, because the geometry tests below depend on a read seeing
+        // what a write put there. A stub that answered every get with the same
+        // object would let rememberSize's read-modify-write appear to work
+        // while proving nothing about what was stored under which key.
+        get: async (key: string | string[]) => {
+          const keys = Array.isArray(key) ? key : [key];
+          const out: Record<string, unknown> = {};
+          for (const k of keys) {
+            if (k === "settings") out.settings = h.settings;
+            else if (k in h.local) out[k] = h.local[k];
+          }
+          return out;
+        },
         set: async (v: Record<string, unknown>) => {
-          Object.assign(h.settings, (v.settings as Record<string, unknown>) ?? {});
+          for (const k of Object.keys(v)) {
+            if (k === "settings") Object.assign(h.settings, (v.settings ?? {}) as object);
+            else h.local[k] = v[k];
+          }
         },
       },
       session: { get: async () => ({}), set: async () => undefined, remove: async () => undefined },
@@ -233,5 +262,113 @@ describe("the shipped service worker's permission wiring", () => {
     await drain();
     expect(h.calls).toContain("getRegisteredContentScripts");
     expect(h.settings.embeddedPlayers).toBe(true);
+  });
+});
+
+/* ============================================================================
+ * THE WRITE HALF OF PER-ORIGIN SIZE MEMORY, in the SHIPPED worker.
+ * ============================================================================
+ *
+ * test/pip/enhance-resize.test.ts proves the page SENDS one debounced
+ * PIP_GEOMETRY_CHANGED per drag, carrying the content size. Nothing there — or
+ * anywhere else — proves the worker does anything with it. The two halves are
+ * joined only by a message type, which is precisely the kind of seam that goes
+ * quietly dead: the user drags, the window looks right, and the size is
+ * forgotten the moment they close it.
+ *
+ * The same bundle-in-a-vm technique as above, and for the same reason: the
+ * handler lives in the top-level `if (typeof chrome !== "undefined")` block,
+ * which only runs when the module is evaluated the way a service worker
+ * evaluates it.
+ * ==========================================================================*/
+const GEOMETRY_CHANGED = "PIP_GEOMETRY_CHANGED";
+
+/** Offer a message to every listener, as Chrome does — with the `sender` and
+ *  `sendResponse` arguments Chrome always passes. The worker's generic relay
+ *  listener CALLS sendResponse unconditionally, so omitting it would make every
+ *  delivery below throw a TypeError before reaching the handler under test. */
+function deliver(h: Harness, msg: unknown): void {
+  for (const fn of h.onMessage) fn(msg, {}, () => undefined);
+}
+
+describe("the shipped service worker's resize persistence", () => {
+  it("registers a runtime.onMessage listener at all", () => {
+    // Without this the tests below would pass vacuously the day the listeners
+    // stop being registered: delivering to an empty array is a silent no-op.
+    const h = loadWorker();
+    expect(h.onMessage.length).toBeGreaterThan(0);
+  });
+
+  it("stores the reported CONTENT size under the reporting origin", async () => {
+    const h = loadWorker();
+    deliver(h, { type: GEOMETRY_CHANGED, origin: "https://example.com", w: 512, h: 288 });
+    await drain();
+    expect(h.local.geometry).toEqual({ "https://example.com": { w: 512, h: 288 } });
+  });
+
+  it("keys per ORIGIN — a second site does not overwrite the first", async () => {
+    // "for each site" is the paid promise. A write that replaced the map rather
+    // than merging into it would pass every single-origin assertion.
+    const h = loadWorker();
+    deliver(h, { type: GEOMETRY_CHANGED, origin: "https://a.example", w: 320, h: 180 });
+    await drain();
+    deliver(h, { type: GEOMETRY_CHANGED, origin: "https://b.example", w: 640, h: 360 });
+    await drain();
+    expect(h.local.geometry).toEqual({
+      "https://a.example": { w: 320, h: 180 },
+      "https://b.example": { w: 640, h: 360 },
+    });
+  });
+
+  it("normalises before storing — a nonsense size never reaches requestWindow", async () => {
+    // rememberSize clamps to 240x135 … 1920x1080. The value arrives from a
+    // page-injected function across a process boundary, and entry.ts reads it
+    // straight back out on the next click.
+    const h = loadWorker();
+    deliver(h, { type: GEOMETRY_CHANGED, origin: "https://example.com", w: 10, h: 99999 });
+    await drain();
+    expect(h.local.geometry).toEqual({ "https://example.com": { w: 240, h: 1080 } });
+  });
+
+  it("HONOURS rememberSizePerSite — the write half of the invariant", async () => {
+    /* The setting has to gate BOTH sides, and the two checks are not redundant.
+     * src/pip/entry.ts carries the capitalised explanation of why the READ side
+     * needs its own check; this is the other half. With it removed, a user who
+     * turned the setting off would still have every resize recorded — the
+     * feature they switched off, running exactly as before, invisibly. */
+    const h = loadWorker();
+    h.settings.rememberSizePerSite = false;
+    deliver(h, { type: GEOMETRY_CHANGED, origin: "https://example.com", w: 512, h: 288 });
+    await drain();
+    expect(h.local.geometry).toBeUndefined();
+  });
+
+  it("defaults to ON when the setting has never been written", async () => {
+    // DEFAULT_SETTINGS.rememberSizePerSite === true, and a fresh install has no
+    // settings record at all. Reading an absent field as falsy would ship the
+    // feature switched off for everyone who never opened the options page.
+    const h = loadWorker();
+    expect(h.settings.rememberSizePerSite).toBeUndefined();
+    deliver(h, { type: GEOMETRY_CHANGED, origin: "https://example.com", w: 400, h: 225 });
+    await drain();
+    expect(h.local.geometry).toEqual({ "https://example.com": { w: 400, h: 225 } });
+  });
+
+  it("ignores a malformed payload rather than writing junk", async () => {
+    // It crosses a process boundary from a function that runs in the page.
+    const h = loadWorker();
+    deliver(h, { type: GEOMETRY_CHANGED, origin: "https://example.com", w: "512", h: 288 });
+    deliver(h, { type: GEOMETRY_CHANGED, w: 512, h: 288 });
+    deliver(h, { type: GEOMETRY_CHANGED, origin: "", w: 512, h: 288 });
+    deliver(h, { type: GEOMETRY_CHANGED });
+    await drain();
+    expect(h.local.geometry).toBeUndefined();
+  });
+
+  it("writes nothing for an unrelated message type", async () => {
+    const h = loadWorker();
+    deliver(h, { type: "PIP_SOMETHING_ELSE", origin: "https://example.com", w: 512, h: 288 });
+    await drain();
+    expect(h.local.geometry).toBeUndefined();
   });
 });
