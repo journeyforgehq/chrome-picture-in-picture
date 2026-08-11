@@ -14,7 +14,13 @@ export default defineConfig({
   // and gesture specs need neither the worker nor the gallery — they serve
   // themselves — and run under playwright.fixtures.config.ts. The arbitration
   // and registration specs need a build with <all_urls> statically granted,
-  // which only playwright.granted.config.ts produces.
+  // which only playwright.granted.config.ts produces — and so does
+  // action-click.spec.ts, added in Task 18. That one is worth a sentence,
+  // because it did NOT announce itself: collected here it PASSED, since
+  // .tmp-granted-dist/ was still lying around from an earlier granted run. On a
+  // clean checkout it would have failed on a missing directory, in the suite
+  // that has nothing to do with it. A spec passing is not evidence it is in the
+  // right config.
   //
   // The four `dpip-*` specs belong to the fixtures config too, and this list had
   // gone stale: they were added in Task 16 without being ignored here, so this
@@ -28,6 +34,7 @@ export default defineConfig({
   // it now does.
   testIgnore: [
     "**/*-visual.spec.ts",
+    "**/action-click.spec.ts",
     "**/detection.spec.ts",
     "**/gesture.spec.ts",
     "**/arbitration.spec.ts",

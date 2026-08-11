@@ -55,6 +55,21 @@ already brings.
   cannot be driven under automation (the consent bubble is out-of-process and a
   spike measured the call never settling). `src/static/manifest.json` is never
   touched — `test/manifest.test.ts` pins the real allowlist.
+  - `action-click.spec.ts` — **the worker→frame gesture hop**, which A-02
+    recorded as uncoverable and A-04 retired. The `_execute_action` accelerator
+    is pressed with CDP `Input.dispatchKeyEvent {type:"rawKeyDown"}` (Playwright's
+    `page.keyboard` sends `keyDown`, which the browser's command handler never
+    sees), `chrome.action.onClicked` fires with real transient activation, and a
+    real PiP window opens. **The only layer that can catch an INVARIANT 1
+    regression** — mutation-verified: `await chrome.storage.session.get("x")` as
+    the first line of that listener turns it red.
+    Every page read in it goes through **raw CDP `Runtime.evaluate`**, and it
+    polls `navigator.userActivation.isActive` to `false` before pressing the key.
+    That is not style: the first version used `page.evaluate`, which carries a
+    user gesture, and **passed with the mutation in place**. On macOS
+    `chrome.commands.getAll()` reports the binding as `⌥P`, not `Alt+P`; the
+    spec asserts it and prints it, so a red run distinguishes "the key was never
+    bound" (S-04's failure mode) from "the hop is broken".
   - `arbitration.spec.ts` — the WRITE side of `window.__pipCoord`: content
     script scores, worker ranks frames by `sender.frameId`, verdict comes back
     per frame via `tabs.sendMessage(…, { frameId })`. Asserts that **exactly
@@ -67,6 +82,10 @@ already brings.
     stub is built on.
 
   **These prove the machinery under a granted permission, not the granting.**
+  `action-click.spec.ts` additionally does **not** prove the toolbar *button*:
+  it drives the keyboard binding, which the manifest points at
+  `_execute_action` precisely so it lands in the same `chrome.action.onClicked`
+  handler with the same activation. A mouse on browser chrome stays manual.
   Nothing here exercises `chrome.permissions.request()`, the consent bubble, or
   `permissions.onRemoved` (which cannot be made to fire under automation — the
   wiring for it is asserted in `test/background/registration-wiring.test.ts`
