@@ -78,6 +78,32 @@ const STYLES = `
 .pip-options > .pip-options__row:first-of-type { border-top: none; padding-top: 8px; }
 .pip-options__text { flex: 1 1 auto; min-width: 0; }
 .pip-options__control { flex: 0 0 auto; padding-top: 2px; }
+.pip-options__stack { display: flex; flex-direction: column; align-items: flex-start; }
+
+/* ============================================================================
+ * RESERVE A BAND FOR LockedFeature's "Unlock" BUTTON.
+ * ============================================================================
+ * LockedFeature (CORE-vendored, not editable here) centres one absolutely
+ * positioned overlay over the whole gated block. With four rows inside it, that
+ * centre lands in the middle of the second row: measured on the committed
+ * screenshots, the button sat across "Remember the size for each si|te" at
+ * 1280px and covered the Select's value — "Medium · 400×225", the one thing
+ * that row exists to report — at 375px. Every unit and computed-style assertion
+ * passed both times; only a human looking at the image could see it, and this
+ * is the surface that asks for money.
+ *
+ * Fixed WITHOUT touching the vendored component: pad a blank strip onto the top
+ * of the fieldset and pin the overlay's button into it. Both rules need
+ * !important because LockedFeature sets padding:0 and align-items:center as
+ * INLINE styles, which outrank any selector. The band is padding we own, so
+ * its position is deterministic rather than depending on how tall the block
+ * happens to be after a copy change.
+ * ==========================================================================*/
+.pip-options .ui-kit-locked-feature > fieldset { padding-top: 48px !important; }
+.pip-options .ui-kit-locked-feature-overlay {
+  align-items: flex-start !important;
+  padding-top: 8px;
+}
 .pip-options__wide { display: block; }
 .pip-options__wide .pip-options__control { padding-top: 12px; }
 
@@ -260,6 +286,7 @@ export function OptionsView({
           label="Window size"
           help="The size the enhanced window opens at, and whether each site keeps its own."
           control={
+            <div className="pip-options__stack">
             <Select
               aria-label="Window size"
               value={settings.windowSize}
@@ -280,18 +307,24 @@ export function OptionsView({
                 { value: "large", label: "Large · 640×360" },
               ]}
             />
+            {/* The sub-switch belongs in the CONTROL column, under the Select.
+              * In the text column it reflowed ABOVE the Select on mobile — a
+              * qualifier rendering before the thing it qualifies. Caught by
+              * looking at the 375px screenshot; every DOM assertion passed
+              * either way, because reading order is not something querySelector
+              * can see. */}
+            <div style={{ marginTop: 10, whiteSpace: "nowrap" }}>
+              <Switch
+                size="small"
+                aria-label="Remember size per site"
+                checked={settings.rememberSizePerSite}
+                onChange={(checked) => onSettingChange("rememberSizePerSite", checked)}
+              />{" "}
+              <Text style={{ fontSize: 13 }}>Remember the size for each site</Text>
+            </div>
+            </div>
           }
-        >
-          <div style={{ marginTop: 10 }}>
-            <Switch
-              size="small"
-              aria-label="Remember size per site"
-              checked={settings.rememberSizePerSite}
-              onChange={(checked) => onSettingChange("rememberSizePerSite", checked)}
-            />{" "}
-            <Text style={{ fontSize: 13 }}>Remember the size for each site</Text>
-          </div>
-        </Row>
+        />
 
         <Row
           label="In-window controls"

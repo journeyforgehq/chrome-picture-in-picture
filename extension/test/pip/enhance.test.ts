@@ -94,7 +94,7 @@ describe("enhanceWindow", () => {
   });
 
   it("wins against the page's INLINE sizing, which travels with the element", () => {
-    /* MEASURED IN e2e/dpip-visual.spec.ts, and it is the reason `!important` is
+    /* MEASURED IN e2e/dpip-window.spec.ts, and it is the reason `!important` is
      * on this rule. A page's STYLESHEETS do not cross the document boundary,
      * but its `style` ATTRIBUTE is part of the element and goes with it — and
      * every real player sets one (YouTube writes explicit pixel dimensions

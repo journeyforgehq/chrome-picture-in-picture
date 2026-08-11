@@ -16,7 +16,7 @@ import { enhanceWindow } from "../src/pip/enhance";
  * is therefore the moment their keyboard shortcuts stop working. Native PiP
  * offers only Chrome's own hover controls; this window is our HTML, so it gets
  * real buttons. That is a headline Pro feature, not decoration, and it is why
- * this spec is a peer of dpip-visual.spec.ts rather than a paragraph in it.
+ * this spec is a peer of dpip-window.spec.ts rather than a paragraph in it.
  *
  * WHY THIS FILE IS SEPARATE FROM THE UNIT TESTS. test/pip/enhance-controls.
  * test.ts runs under happy-dom: no layout, no cascade, no hover, no focus ring.
@@ -29,7 +29,7 @@ import { enhanceWindow } from "../src/pip/enhance";
  * ==========================================================================*/
 
 /* viewport: null AND channel: "chromium" are both load-bearing, for the two
- * reasons dpip-visual.spec.ts documents at length:
+ * reasons dpip-window.spec.ts documents at length:
  *
  *   viewport: null      — Playwright's default 1280x720 viewport is applied
  *                         with CDP Emulation.setDeviceMetricsOverride and the
@@ -49,7 +49,7 @@ declare global {
   interface Window {
     /* __pipEntry, __enhanceWindow, __pipApi, __pipWin, __lastResult and
      * __lastSettled are all declared once in the specs that introduced them
-     * (gesture.spec.ts and dpip-visual.spec.ts). These files share ONE
+     * (gesture.spec.ts and dpip-window.spec.ts). These files share ONE
      * TypeScript program, so redeclaring any of them here with a different
      * signature is a TS2717 conflict. Only the property this spec adds is
      * declared below. */

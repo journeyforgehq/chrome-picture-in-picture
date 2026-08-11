@@ -32,7 +32,7 @@ import { defineConfig } from "@playwright/test";
 //                                       requestPictureInPicture() call under a
 //                                       real page.click(), plus a no-gesture
 //                                       control.
-//                                     dpip-visual.spec.ts — the OTHER real call,
+//                                     dpip-window.spec.ts — the OTHER real call,
 //                                       documentPictureInPicture.requestWindow(),
 //                                       and the computed style of the window it
 //                                       opens.
@@ -50,7 +50,7 @@ import { defineConfig } from "@playwright/test";
 // no-gesture control still gets its NotAllowedError. Add --headed to watch the
 // floating windows appear; nothing in either spec requires it.
 //
-// dpip-visual.spec.ts qualifies on exactly the same test — NAME THE EXTERNAL
+// dpip-window.spec.ts qualifies on exactly the same test — NAME THE EXTERNAL
 // DEPENDENCY IT NEEDS THAT THE OTHER TWO DO NOT BRING, and there isn't one. It
 // serves the same fixtures from the same e2e/serve.ts, wants the same autoplay
 // flag, and calls the same shipped pipEntry through the same addInitScript
@@ -66,7 +66,7 @@ import { defineConfig } from "@playwright/test";
 // dpip-controls.spec.ts joins on the same test and fails it the same way — it
 // serves one more self-served fixture from the same e2e/serve.ts and drives the
 // same shipped functions through the same addInitScript round trip. It carries
-// the SAME two per-file declarations dpip-visual does (viewport: null and
+// the SAME two per-file declarations dpip-window does (viewport: null and
 // channel: "chromium"), and they are repeated in that file rather than hoisted
 // here for exactly the reason given above: hoisting them would let the other
 // specs inherit an environment they never asked for, and would let this one
@@ -86,7 +86,7 @@ import { defineConfig } from "@playwright/test";
 // fixtures.
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "**/{detection,gesture,dpip-visual,dpip-controls}.spec.ts",
+  testMatch: "**/{detection,gesture,dpip-window,dpip-controls}.spec.ts",
   workers: 1,
   fullyParallel: false,
   timeout: 30_000,

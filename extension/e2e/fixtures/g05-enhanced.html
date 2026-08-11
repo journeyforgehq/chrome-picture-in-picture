@@ -14,7 +14,7 @@
   shape must stay in step with PipPrefs in src/pip/prefs.ts.
 
   windowSize "medium" is LOAD-BEARING, not a default picked for tidiness: it is
-  the 400x225 preset, and dpip-visual.spec.ts asserts the PiP window's INNER box
+  the 400x225 preset, and dpip-window.spec.ts asserts the PiP window's INNER box
   is exactly that. Change it here and that assertion is measuring a different
   contract.
 
