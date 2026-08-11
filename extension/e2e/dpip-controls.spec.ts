@@ -26,6 +26,23 @@ import { enhanceWindow } from "../src/pip/enhance";
  * Every assertion below reads getComputedStyle on a real element inside a real
  * Document PiP window, and the last test captures a frame for a human to look
  * at — because a passing toHaveCSS cannot tell you the bar is READABLE.
+ *
+ * GROUP G, ROW G12 — "in-window controls: play/pause, seek and speed act on the
+ * moved video element" — is the test named "G12 — the buttons ACT on the
+ * video…" below. Everything else in this file goes BEYOND that row (style,
+ * reveal, focus ring, geometry, subtitles) and is deliberately not labelled, so
+ * the label keeps meaning "this is the catalogue row" rather than "this is
+ * about controls".
+ *
+ * SEEK AND THE FULL SPEED CYCLE ARE NOT PROVED HERE, and that is stated at
+ * length inside that test: the fixture's canvas captureStream is a LIVE stream,
+ * so it silently discards both currentTime and playbackRate. Both are pinned in
+ * test/pip/enhance-controls.test.ts; a real seek on a real seekable file is a
+ * manual row.
+ *
+ * The full Group G coverage table, including the three rows CI cannot prove at
+ * all, lives in ONE place: the header of e2e/dpip-window.spec.ts, mirrored into
+ * e2e/README.md.
  * ==========================================================================*/
 
 /* viewport: null AND channel: "chromium" are both load-bearing, for the two
@@ -292,7 +309,7 @@ test.describe("the in-window control bar @dpip", () => {
     expect([Math.round(video.width), Math.round(video.height)], ctx).toEqual(WANT);
   });
 
-  test("the buttons ACT on the video — pause and speed (seek: see comment)", async ({ page, context }) => {
+  test("G12 — the buttons ACT on the video — pause and speed (seek: see comment)", async ({ page, context }) => {
     // The unit tests prove the handlers call the right methods on a fake. This
     // proves the wiring survives a real cross-document move: the element the
     // buttons hold is the element now living in the other window.

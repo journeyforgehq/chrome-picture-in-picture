@@ -1,0 +1,142 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>g04 — the size the enhanced window opens at (clamping, and per-origin memory)</title>
+<body>
+<!--
+  GROUP G, ROWS G04, G09 AND G10 — one fixture, because all three ask the same
+  question of the same code: WHAT SIZE DOES THE WINDOW OPEN AT, given the prefs
+  this origin was handed?
+
+    G04  a stored size larger than any screen   => clamped sanely, no crash,
+                                                   no zero-size window
+    G09  re-open on the SAME origin             => the remembered size, not the
+                                                   preset default
+    G10  re-open on a DIFFERENT origin          => THAT origin's size, not the
+                                                   previous one's
+
+  g05-enhanced.html cannot serve these: its prefs are a hardcoded literal, and
+  every one of these rows needs a DIFFERENT geometry map. So this page reads its
+  prefs from the QUERY STRING:
+
+    ?size=small|medium|large     the windowSize preset (default "medium")
+    ?geometry=<url-encoded JSON> the geometry map, keyed by ORIGIN, exactly the
+                                 shape src/pip/geometry.ts stores
+    ?remember=off                sets rememberSizePerSite false
+
+  A query string rather than an addInitScript global on purpose: G09 and G10
+  both need DIFFERENT prefs on a SECOND page load, and addInitScript is bound to
+  the context for the whole test. e2e/serve.ts strips the query before resolving
+  the file, so this costs the server nothing.
+
+  IT ALSO RECORDS WHAT WAS ASKED FOR. window.__requested captures the argument
+  that actually reached documentPictureInPicture.requestWindow. That is the only
+  way to distinguish "pipEntry clamped 99999 to 1920" from "pipEntry forwarded
+  99999 and the window manager quietly did something sensible with it" — and it
+  is the clamp, not the window manager's mercy, that this fixture's G04 row is
+  about. The recorder DELEGATES to the real method, so the window that opens is
+  a real one measured the ordinary way.
+
+  As in every other fixture here, __pipEntry is NOT defined on this page — the
+  spec injects the shipped function through the same
+  Function.prototype.toString() trip chrome.scripting.executeScript makes.
+-->
+<button id="open">Open the enhanced window</button>
+<div id="stage"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+
+  const params = new URLSearchParams(location.search);
+  const size = params.get("size") || "medium";
+  const remember = params.get("remember") !== "off";
+  let geometry = {};
+  const rawGeometry = params.get("geometry");
+  if (rawGeometry) {
+    try {
+      geometry = JSON.parse(rawGeometry);
+    } catch (e) {
+      // Recorded, never swallowed: a spec whose geometry param failed to parse
+      // would silently measure the PRESET and pass a row about memory.
+      window.__fixtureError = "geometry param did not parse: " + String(e);
+    }
+  }
+  window.__prefsUsed = { size: size, remember: remember, geometry: geometry, origin: location.origin };
+
+  // --- the recorder ------------------------------------------------------
+  window.__requested = null;
+  window.__rawInner = null;
+  const dpip = window.documentPictureInPicture;
+  if (dpip && typeof dpip.requestWindow === "function") {
+    const original = dpip.requestWindow;
+    const recorder = function (options) {
+      window.__requested = {
+        width: options ? options.width : undefined,
+        height: options ? options.height : undefined,
+      };
+      /* THE SIZE THE BROWSER HANDED BACK, BEFORE pipEntry CORRECTED IT.
+       *
+       * S-12: requestWindow's `height` is not the content height, the deficit
+       * MOVES BETWEEN CHROME BUILDS (-52 on Chromium 131, -56 on Chrome 151, 0
+       * on the build this suite currently runs on), and pipEntry measures it at
+       * runtime and fixes it with ONE resizeBy. Without this reading, the
+       * browser layer cannot tell "the correction ran and worked" from "there
+       * was nothing to correct" — and on a zero-deficit build a REGRESSION THAT
+       * DELETED THE CORRECTION would be invisible. Measured: it is. See the
+       * S-12 test in dpip-geometry.spec.ts, which arms itself off this value.
+       *
+       * The `.then` is what makes it the RAW value: pipEntry attaches its own
+       * handler to the promise this returns, i.e. to the DERIVED one, so this
+       * handler runs first and reads the window before resizeBy is called. The
+       * extra microtask costs nothing — the page's activation is time-based
+       * (~5s, S-11), not turn-based. */
+      return Reflect.apply(original, dpip, [options]).then(function (win) {
+        window.__rawInner = [win.innerWidth, win.innerHeight];
+        return win;
+      });
+    };
+    recorder.__isRecorder = true;
+    try {
+      Object.defineProperty(dpip, "requestWindow", {
+        value: recorder,
+        configurable: true,
+        writable: true,
+      });
+    } catch (e) {
+      window.__fixtureError = "could not install the requestWindow recorder: " + String(e);
+    }
+  } else {
+    window.__fixtureError = "this browser has no documentPictureInPicture.requestWindow";
+  }
+
+  const video = makeVideo({ label: "target", muted: false, duration: 600 });
+  document.getElementById("stage").append(video);
+
+  document.getElementById("open").addEventListener("click", () => {
+    if (typeof window.__pipEntry !== "function") {
+      window.__lastResult = { harnessError: "window.__pipEntry was not injected" };
+      window.__lastSettled = true;
+      return;
+    }
+
+    window.__lastResult = undefined;
+    window.__lastSettled = false;
+
+    // CALLED SYNCHRONOUSLY. Nothing may suspend above this line.
+    const result = window.__pipEntry({
+      prefs: {
+        tier: "pro",
+        enhancedWindow: true,
+        windowSize: size,
+        rememberSizePerSite: remember,
+        inWindowControls: true,
+        subtitles: false,
+        geometry: geometry,
+      },
+    });
+    Promise.resolve(result).then((value) => {
+      window.__lastResult = value;
+      window.__lastSettled = true;
+    });
+  });
+
+  ready();
+</script>

@@ -25,6 +25,111 @@ import { enhanceWindow } from "../src/pip/enhance";
  * pins its EFFECT.
  * ==========================================================================*/
 
+/* ============================================================================
+ * GROUP G — THE CANONICAL COVERAGE TABLE. THE ONE COPY. Task 16.
+ * ============================================================================
+ *
+ * The design package (02-architecture.md §Group G) lists 12 scenarios for the
+ * Document PiP / Pro path. Tasks 8-13 built the feature and wrote e2e as they
+ * went, so a good deal of the catalogue was already covered but UNLABELLED —
+ * this table is the audit, and the G-IDs now appear in the covering test names
+ * so the catalogue is traceable in both directions. It lives HERE, once, and is
+ * mirrored into e2e/README.md; the other three dpip specs point at it rather
+ * than keeping copies that would drift.
+ *
+ *  ID  | proved by
+ * -----+----------------------------------------------------------------------
+ *  G01 | dpip-fallback.spec.ts — "G01 — with documentPictureInPicture absent…"
+ *  G02 | dpip-fallback.spec.ts — "G02 — when requestWindow REJECTS…" (the toast
+ *      |   half runs the real, browser-produced result through the real
+ *      |   decideOutcome; the worker's executeScript(showToast) is pinned in
+ *      |   test/background/registration-wiring.test.ts)
+ *  G03 | THIS FILE — "G03 + G05 — the stylesheet crossed the document
+ *      |   boundary…" (probe.inner === exactly [400,225]), corroborated by the
+ *      |   video's own box in "G03 + G05 — the video fills the window…" and by
+ *      |   the captured PNG's pixel dimensions in "G03 — the window RENDERS…",
+ *      |   and by dpip-geometry.spec.ts's "G03 — the S-12 correction…", which
+ *      |   measures this build's deficit rather than assuming one
+ *  G04 | dpip-geometry.spec.ts — the oversize row AND the zero-size row; both
+ *      |   assert the argument that actually reached requestWindow
+ *  G05 | THIS FILE — "G03 + G05 — the stylesheet crossed…" (overflow:hidden on
+ *      |   html, and scrollHeight === clientHeight on BOTH axes) and "G03 + G05
+ *      |   — the video fills the window…" (overflow:hidden on body)
+ *  G06 | THIS FILE — "G06 — the video MOVED…" (moved, not cloned) and "G06 —
+ *      |   the video keeps playing across the move…" (same element, currentTime
+ *      |   continuous, still advancing on the other side)
+ *  G07 | THIS FILE — "G07 — restore puts the video back in #stage, still
+ *      |   playing" and "G07 — closing the window tells the worker…" (the
+ *      |   PIP_DPIP_CLOSED that clears activePip). SEE CARVE-OUT 3.
+ *  G08 | THIS FILE — "G08 — a resize of the real window reports the CONTENT
+ *      |   size to the worker". The storage.local half is worker-side and is
+ *      |   pinned against the shipped bundle in
+ *      |   test/background/registration-wiring.test.ts. SEE CARVE-OUT 2.
+ *  G09 | dpip-geometry.spec.ts — "G09 — a resize is remembered…"
+ *  G10 | dpip-geometry.spec.ts — "G10 — a DIFFERENT origin opens at its own
+ *      |   size…", across serve.ts's two real origins
+ *  G11 | test/pip/licence-lapse.test.ts — a UNIT test, deliberately: the row is
+ *      |   "the next invocation uses native, with no paywall interruption",
+ *      |   which needs no window at all. See that file's header for the choice.
+ *  G12 | dpip-controls.spec.ts — "G12 — the buttons ACT on the video…" (play/
+ *      |   pause on the moved element, and the speed readout that cannot lie),
+ *      |   plus the bar's style, reveal, focus ring and geometry. SEEK and the
+ *      |   full speed cycle are pinned in test/pip/enhance-controls.test.ts
+ *      |   because the fixture's canvas captureStream is a LIVE stream and
+ *      |   silently discards both currentTime and playbackRate — measured, not
+ *      |   assumed; see that test's comment. A real seek on a real seekable
+ *      |   file is a manual row.
+ *
+ * ----------------------------------------------------------------------------
+ * WHAT A GREEN RUN OF THIS SUITE DOES NOT COVER. THREE THINGS. READ THEM.
+ * ----------------------------------------------------------------------------
+ *
+ * 1. requestWindow()'s GESTURE REQUIREMENT. S-12 ran a no-gesture control in
+ *    every arm — bundled Chromium and real Chrome, `viewport: null` and the
+ *    default — and requestWindow opened a window EVERY TIME without user
+ *    activation. Under automation the requirement is not enforced at all.
+ *    S-10 measured it by hand (NotAllowedError) and the release smoke sheet
+ *    re-checks it. There is deliberately NO assertion anywhere in these specs
+ *    that touches it: one would pass for the wrong reason and then be believed.
+ *    (The fixtures still click for real, because everything DOWNSTREAM of the
+ *    call — the native fallback in particular — does need the activation.)
+ *
+ * 2. A USER-DRAGGED RESIZE. The `resize` event is exercised programmatically
+ *    (Task 12 measured a real 400x225 -> 480x265 via resizeBy under a fresh
+ *    click, and G09 carries that number into a re-open). Dragging an OS window
+ *    frame is not automatable: Playwright's input goes to the page, not to the
+ *    window manager. The debounce that turns a drag's BURST of events into one
+ *    storage write is pinned by test/pip/enhance-resize.test.ts against fake
+ *    timers, and by nothing here. Smoke sheet.
+ *
+ * 3. CHROME FIRING `pagehide` ON A CLOSING DOCUMENT PiP WINDOW. Task 11 flagged
+ *    this and it is still true: the e2e drives restore() DIRECTLY, because no
+ *    automation can close a real PiP window the way a user does. That
+ *    enhanceWindow registers restore on `pagehide` is pinned by
+ *    test/pip/enhance-lifecycle.test.ts; that Chrome FIRES that event on a
+ *    user-closed PiP window is ASSUMED, not measured. Smoke sheet.
+ *
+ * ----------------------------------------------------------------------------
+ * THE TWO GUARDS THAT PROTECT THE PAID TIER, MUTATION-TESTED (Task 16)
+ * ----------------------------------------------------------------------------
+ *
+ * G05 — deleting `overflow:hidden` from enhance.ts's CSS FAILED both G05 tests
+ * here, on the `overflow` assertions. It did NOT move `scrollableY`/`X`; the
+ * comment beside those assertions explains why both are needed and neither is
+ * spare.
+ *
+ * G03 — removing `win.resizeBy(deficitW, deficitH)` from entry.ts DID NOT fail
+ * any G03 test at this layer, and the reason is not a weak assertion: on the
+ * build this suite runs, requestWindow already returns the requested content
+ * box (deficit 0), so there is nothing for the correction to do and nothing to
+ * observe when it goes. test/pip/entry-dpip.test.ts caught it immediately (3
+ * failures) because it SIMULATES the deficits S-12 measured elsewhere (-52 on
+ * Chromium 131, -56 on Chrome 151). dpip-geometry.spec.ts's "G03 — the S-12
+ * correction…" now measures this build's deficit, prints it, and turns itself
+ * into a live guard on any build that has one. Do not delete the unit test on
+ * the strength of the browser one: a browser cannot be asked for a deficit.
+ * ==========================================================================*/
+
 /* viewport: null IS LOAD-BEARING. Playwright's default 1280x720 viewport is
  * applied with CDP Emulation.setDeviceMetricsOverride and the Document PiP
  * window INHERITS the override — S-12 measured every requested size reporting
@@ -226,7 +331,7 @@ test.describe("the enhanced window @dpip", () => {
     ).not.toEqual([1280, 720]);
   });
 
-  test("the stylesheet crossed the document boundary and actually applied", async ({ page }) => {
+  test("G03 + G05 — the stylesheet crossed the document boundary and actually applied", async ({ page }) => {
     await open(page);
     await openAndEnhance(page);
     const probe = await probeWindow(page);
@@ -253,8 +358,22 @@ test.describe("the enhanced window @dpip", () => {
         "  FIX THE ENVIRONMENT, NEVER THIS EXPECTATION.\n"
     ).toEqual(WANT);
 
-    // COMPUTED STYLE, not DOM presence. Each of these is a rule from the
-    // adopted sheet, measured on a real element by a real layout engine.
+    /* COMPUTED STYLE, not DOM presence. Each of these is a rule from the
+     * adopted sheet, measured on a real element by a real layout engine.
+     *
+     * G05, AND WHICH HALF OF IT DOES THE WORK — MEASURED BY MUTATION (Task 16).
+     * Deleting `overflow:hidden` from enhance.ts's CSS fails THIS test and the
+     * one below, on the two `overflow` assertions, and on nothing else:
+     * `scrollableY`/`scrollableX` stayed FALSE throughout, because at 400x225
+     * with the video sized to 100% there is nothing to overflow.
+     *
+     * So the two assertions are not redundant, and neither is decoration:
+     *   overflow      catches the DECLARATION being lost — the SuperPiP defect.
+     *   scrollableY/X catches the SHEET not applying at all, which is the other
+     *                 failure this file exists for: an unstyled video lays out
+     *                 at its inline 640x360 inside a 400x225 document and the
+     *                 page really does scroll.
+     * Do not "simplify" either into the other. */
     expect(probe.overflow, ctx).toBe("hidden");
     expect(probe.bodyMargin, ctx).toBe("0px");
     expect(probe.videoFit, ctx).toBe("contain");
@@ -262,7 +381,7 @@ test.describe("the enhanced window @dpip", () => {
     expect(probe.scrollableX, ctx).toBe(false);
   });
 
-  test("the video fills the window instead of laying out at its 300x150 default", async ({
+  test("G03 + G05 — the video fills the window instead of laying out at its 300x150 default", async ({
     page,
   }) => {
     // The failure this catches is the one the whole task is shaped around: the
@@ -281,7 +400,7 @@ test.describe("the enhanced window @dpip", () => {
     expect(probe.bodyPadding, ctx).toBe("0px");
   });
 
-  test("the video MOVED — one video in the PiP window, none left in the page", async ({ page }) => {
+  test("G06 — the video MOVED — one video in the PiP window, none left in the page", async ({ page }) => {
     await open(page);
     await openAndEnhance(page);
     const probe = await probeWindow(page);
@@ -291,7 +410,95 @@ test.describe("the enhanced window @dpip", () => {
     expect(probe.leftBehind, ctx).toBe(0);
   });
 
-  test("restore puts the video back in #stage, still playing", async ({ page }) => {
+  test("G06 — the video keeps playing across the move, with a CONTINUOUS currentTime", async ({
+    page,
+  }) => {
+    /* THE OTHER HALF OF G06, and the half no DOM assertion can see. "The video
+     * moved" is proved above by counting elements. This row also demands that
+     * the thing that arrived is STILL THE SAME VIDEO, STILL RUNNING: a
+     * cross-document adoption that re-attached the media element would leave
+     * every count in this file correct and hand the user a black rectangle, or
+     * a video that jumped back to the start.
+     *
+     * THREE SEPARATE CLAIMS, because two of them can hold while the third
+     * fails:
+     *   IDENTITY   a dataset marker written on the page's element BEFORE the
+     *              move is read back off the element inside the PiP document.
+     *              A clone would carry the marker too — but the count assertions
+     *              in the test above (one there, none left here) already rule a
+     *              clone out, and together the two are decisive.
+     *   CONTINUITY currentTime did not go backwards across the boundary. The
+     *              fixture's video has been playing for a while by then, so a
+     *              reset to 0 is unmistakable — which is why the poll below
+     *              waits for a non-trivial currentTime before the move rather
+     *              than measuring at the start where 0 and "reset to 0" look
+     *              the same.
+     *   LIVENESS   it is still ADVANCING on the other side. `paused === false`
+     *              is not that claim: a media element whose source went away
+     *              reports exactly the same. */
+    await open(page);
+
+    await expect
+      .poll(async () => await page.evaluate(() => document.querySelector("video")!.currentTime), {
+        timeout: 5000,
+        message: "the fixture's video never started playing, so there is nothing to be continuous",
+      })
+      .toBeGreaterThan(0.3);
+
+    await page.click("#open");
+    await page.waitForFunction(() => window.__lastSettled === true);
+    const result = (await page.evaluate(() => window.__lastResult))!;
+    expect(result?.mode, `\n  __lastResult: ${JSON.stringify(result)}\n`).toBe("document");
+
+    // The marker and the reading are taken in the SAME turn as the move, so no
+    // wall-clock time passes between "before" and "after" that could be
+    // mistaken for a discontinuity.
+    const moved = await page.evaluate(() => {
+      const source = document.querySelector("video")!;
+      source.dataset.g06 = "the-page-element";
+      const before = { currentTime: source.currentTime, paused: source.paused };
+      window.__pipApi = window.__enhanceWindow!({
+        opts: { inWindowControls: true, subtitles: false },
+      });
+      const arrived = window.__pipWin!.document.querySelector("video")!;
+      return {
+        before,
+        after: {
+          currentTime: arrived.currentTime,
+          paused: arrived.paused,
+          marker: arrived.dataset.g06 ?? null,
+          readyState: arrived.readyState,
+        },
+      };
+    });
+    const ctx = `\n  across the move: ${JSON.stringify(moved)}\n`;
+    console.log(`  G06 across the move: ${JSON.stringify(moved)}`);
+
+    expect(moved.after.marker, ctx).toBe("the-page-element");
+    expect(moved.before.paused, ctx).toBe(false);
+    expect(moved.after.paused, ctx).toBe(false);
+    // CONTINUOUS: not rewound, and not zero.
+    expect(moved.after.currentTime, ctx).toBeGreaterThanOrEqual(moved.before.currentTime);
+    expect(moved.after.currentTime, ctx).toBeGreaterThan(0.3);
+    // And the pipeline survived the trip: HAVE_CURRENT_DATA or better.
+    expect(moved.after.readyState, ctx).toBeGreaterThanOrEqual(2);
+
+    // STILL RUNNING on the far side of the boundary, which `paused` cannot say.
+    await expect
+      .poll(
+        async () =>
+          await page.evaluate(() => window.__pipWin!.document.querySelector("video")!.currentTime),
+        {
+          timeout: 5000,
+          message:
+            "currentTime stopped advancing after the move — the element is in " +
+            "the PiP document and not paused, but nothing is playing",
+        }
+      )
+      .toBeGreaterThan(moved.after.currentTime);
+  });
+
+  test("G07 — restore puts the video back in #stage, still playing", async ({ page }) => {
     // Rule 4: the site's player layout has to survive the round trip. The unit
     // test proves the insertBefore arithmetic; this proves the element is alive
     // and rendering on the other side of a real cross-document move.
@@ -321,7 +528,7 @@ test.describe("the enhanced window @dpip", () => {
     expect(after.rect, ctx).toEqual([640, 360]);
   });
 
-  test("a SECOND restore leaves the page exactly as the first one left it", async ({ page }) => {
+  test("G07 — a SECOND restore leaves the page exactly as the first one left it", async ({ page }) => {
     /* WHY THIS IS A BROWSER TEST AND NOT ONLY A UNIT ONE. `restore` is reachable
      * from two directions — the PiP window's own pagehide listener and the
      * handle enhanceWindow returns — so a close that also triggers an explicit
@@ -370,7 +577,85 @@ test.describe("the enhanced window @dpip", () => {
     console.log(`  captured ${file}`);
   });
 
-  test("the window RENDERS — CSS asserted on the real element, and a frame captured", async ({
+  test("G07 — closing the window tells the worker, so activePip cannot go stale", async ({
+    page,
+  }) => {
+    /* THE HALF OF G07 THAT IS NOT ABOUT THE VIDEO. "activePip cleared" is a
+     * worker fact, and the worker learns it from exactly one place: the
+     * PIP_DPIP_CLOSED message enhanceWindow's restore sends. Chrome gives the
+     * worker NO notification that a Document PiP window closed, so if that
+     * message stops being sent, `activePip` outlives the window, the next
+     * toolbar click takes the EXIT branch against a window that is not there,
+     * and the button silently does nothing.
+     *
+     * THREE THINGS THIS DOES NOT PROVE, all of them covered elsewhere or named:
+     *   - that Chrome fires `pagehide` when the USER closes the window. No
+     *     automation can close a real PiP window, so this drives restore()
+     *     directly. CARVE-OUT 3 in the header. That restore is REGISTERED on
+     *     pagehide is pinned by test/pip/enhance-lifecycle.test.ts.
+     *   - that the worker clears the record on receipt. That is
+     *     test/background/registration-wiring.test.ts, against the shipped
+     *     bundle.
+     *   - anything about a real extension context. This fixture is a plain page
+     *     with none, so the send is RECORDED rather than delivered — the same
+     *     honest stub the G08 resize test uses, and for the same reason.
+     *
+     * What is left is the part only a browser can show: that after a real
+     * cross-document move and a real restore, the shipped function actually
+     * reaches for chrome.runtime and sends this exact message, ONCE. */
+    await open(page);
+    await openAndEnhance(page);
+
+    const installed = await page.evaluate(() => {
+      window.__pipMessages = [];
+      (window as unknown as { chrome: unknown }).chrome = {
+        runtime: {
+          id: "e2e",
+          sendMessage: (m: { type?: string }) => {
+            window.__pipMessages!.push(m);
+            return Promise.resolve();
+          },
+        },
+      };
+      return (window as unknown as { chrome?: { runtime?: { id?: string } } }).chrome?.runtime?.id;
+    });
+    expect(installed, "the recording chrome stub did not install on the page").toBe("e2e");
+
+    const after = await page.evaluate(() => {
+      window.__pipApi!.restore();
+      const v = document.querySelector<HTMLVideoElement>("#stage video");
+      return {
+        messages: window.__pipMessages,
+        home: v !== null,
+        paused: v ? v.paused : null,
+      };
+    });
+    const ctx = `\n  after restore: ${JSON.stringify(after)}\n`;
+    console.log(`  G07 messages: ${JSON.stringify(after.messages)}`);
+
+    // The user's video first — the message is bookkeeping, and enhance.ts
+    // deliberately sends it only AFTER the element is home.
+    expect(after.home, ctx).toBe(true);
+    expect(after.paused, ctx).toBe(false);
+
+    const closed = (after.messages ?? []).filter((m) => m.type === "PIP_DPIP_CLOSED");
+    expect(closed.length, ctx).toBe(1);
+
+    /* A SECOND restore must NOT report again. Not tidiness: by the time a
+     * stray second report arrives, `activePip` may already describe a NEW
+     * window, and clearing it would break the very button this message exists
+     * to keep working. */
+    const again = await page.evaluate(() => {
+      window.__pipApi!.restore();
+      return window.__pipMessages;
+    });
+    expect(
+      (again ?? []).filter((m) => m.type === "PIP_DPIP_CLOSED").length,
+      `\n  after the second restore: ${JSON.stringify(again)}\n`
+    ).toBe(1);
+  });
+
+  test("G03 — the window RENDERS — CSS asserted on the real element, and a frame captured", async ({
     page,
     context,
   }) => {
@@ -423,7 +708,7 @@ test.describe("the enhanced window @dpip", () => {
     expect(probe.videoCount, `\n  probe: ${JSON.stringify(probe)}\n`).toBe(1);
   });
 
-  test("a resize of the real window reports the CONTENT size to the worker", async ({
+  test("G08 — a resize of the real window reports the CONTENT size to the worker", async ({
     page,
     context,
   }) => {
