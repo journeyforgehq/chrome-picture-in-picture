@@ -1,0 +1,86 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>g12 — the enhanced window's in-window controls and subtitles</title>
+<body>
+<!--
+  THE CONTROL-BAR FIXTURE. g05-enhanced.html covers the window and the sheet
+  that crosses into it; this one covers what enhanceWindow DRAWS there.
+
+  It is a separate page rather than a flag on g05 for one reason: this video
+  carries a <track>. g05's assertions include "the video fills the window" and
+  an exact 400x225 box, and a text track that the UA decides to lay out inside
+  the video box is precisely the kind of thing that could move those numbers.
+  Keeping the subtitle case here means a failure in one spec cannot be caused
+  by the other spec's fixture.
+
+  WHY THE TRACK IS A BLOB AND NOT A FILE. e2e/serve.ts maps a small, closed set
+  of extensions to content types and .vtt is not among them; a track served as
+  application/octet-stream is ignored by Chrome. A blob: URL is same-origin,
+  carries its own type, and keeps the whole fixture in one file — no server
+  change, and nothing for a later reader to go looking for.
+
+  windowSize "medium" (the 400x225 preset) matches g05 deliberately: the control
+  bar's geometry assertions are expressed against that window, and the smallest
+  preset is also the hardest case for "the bar does not swallow the video".
+
+  As in g05, __pipEntry and __enhanceWindow are NOT defined here — the spec
+  injects both through the same Function.prototype.toString() trip Chrome makes,
+  so this page exercises the shipped functions rather than copies of them.
+-->
+<button id="open">Open the enhanced window</button>
+<div id="stage"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+
+  const video = makeVideo({ label: "target", muted: false, duration: 600 });
+
+  // One long cue, so it is active at whatever currentTime the spec measures at.
+  const vtt = [
+    "WEBVTT",
+    "",
+    "1",
+    "00:00:00.000 --> 00:10:00.000",
+    "in-window subtitle cue",
+    "",
+  ].join("\n");
+  const track = document.createElement("track");
+  track.kind = "subtitles";
+  track.srclang = "en";
+  track.label = "English";
+  track.default = false; // enhanceWindow is what must turn it on, not the markup
+  track.src = URL.createObjectURL(new Blob([vtt], { type: "text/vtt" }));
+  video.append(track);
+
+  document.getElementById("stage").append(video);
+
+  document.getElementById("open").addEventListener("click", () => {
+    if (typeof window.__pipEntry !== "function") {
+      window.__lastResult = { harnessError: "window.__pipEntry was not injected" };
+      window.__lastSettled = true;
+      return;
+    }
+
+    window.__lastResult = undefined;
+    window.__lastSettled = false;
+
+    // CALLED SYNCHRONOUSLY. Nothing may suspend above this line — the
+    // activation is spent by the call, and requestWindow refuses without it.
+    const result = window.__pipEntry({
+      prefs: {
+        tier: "pro",
+        enhancedWindow: true,
+        windowSize: "medium",
+        rememberSizePerSite: true,
+        inWindowControls: true,
+        subtitles: true,
+        geometry: {},
+      },
+    });
+    Promise.resolve(result).then((value) => {
+      window.__lastResult = value;
+      window.__lastSettled = true;
+    });
+  });
+
+  ready();
+</script>

@@ -51,10 +51,16 @@
  *    was on. The original parent AND the original next sibling are recorded
  *    before the move and used by insertBefore on the way back.
  *
- * SCOPE. `opts.inWindowControls` and `opts.subtitles` are accepted and IGNORED
- * here on purpose: in-window controls and subtitles are Task 10, close/restore
- * messaging is Task 11, resize persistence is Task 12. Each gets its own visual
- * verification, which is why the plan splits them.
+ * 5. THE CONTROL BAR IS NOT DECORATION. Spike S-04 MEASURED that
+ *    chrome.commands shortcuts DO NOT FIRE while the floating PiP window has
+ *    focus — they need a browser window focused. So the moment the user clicks
+ *    the floating window is the moment their keyboard shortcuts stop working,
+ *    and native PiP offers only Chrome's own hover controls. This window is our
+ *    HTML, so it gets real buttons. That is why buildControls lives here rather
+ *    than being deferred as polish.
+ *
+ * SCOPE. close/restore messaging is Task 11 and resize persistence is Task 12;
+ * each gets its own visual verification, which is why the plan splits them.
  * ==========================================================================*/
 
 export interface EnhanceOptions {
@@ -74,10 +80,6 @@ export function enhanceWindow(input: { win?: Window | null; opts: EnhanceOptions
    * a global. */
   const win = input.win || (window as unknown as { __pipWin?: Window }).__pipWin;
   if (!win) return { restore: function () { /* no window to decorate */ } };
-  // DELIBERATELY UNREAD IN THIS TASK. `opts.inWindowControls` and
-  // `opts.subtitles` are accepted and ignored — see the SCOPE note in the
-  // header. It is bound rather than left on `input` so Task 10 adds behaviour
-  // here without also having to re-establish the parameter and its plumbing.
   const opts = input.opts;
   const doc = win.document;
 
@@ -113,7 +115,41 @@ export function enhanceWindow(input: { win?: Window | null; opts: EnhanceOptions
     ".pip-stage{position:relative;width:100%;height:100%}" +
     "video{width:100%!important;height:100%!important;object-fit:contain!important;" +
     "max-width:none!important;max-height:none!important;" +
-    "display:block;background:#000}";
+    "display:block;background:#000}" +
+    /* THE BAR. It is `position:absolute` inside the `position:relative` stage,
+     * so it floats OVER the bottom of the video rather than stealing height
+     * from it — a bar in the flow would shrink the video every time the window
+     * was resized and reintroduce the letterboxing the sheet above exists to
+     * remove. It is hidden at rest (`opacity:0`) and revealed by hover so the
+     * window is a clean video when nobody is pointing at it; `:focus-within` is
+     * the keyboard half of the same reveal, without which a Tab into the bar
+     * would move focus to something invisible.
+     *
+     * `:focus`, NOT `:focus-visible`, on .pip-btn — the same decision
+     * src/options/OptionsView.tsx documents at length: Chrome only matches
+     * :focus-visible on a programmatic .focus() when the preceding interaction
+     * was already keyboard-ish, so a :focus-visible-only ring is invisible to a
+     * Playwright focus() check and therefore silently regressable. The e2e spec
+     * asserts this outline through getComputedStyle; make it :focus-visible and
+     * that assertion stops being able to see it.
+     *
+     * No `!important` here, unlike the video rule above: these elements are
+     * built by this function in this document and nothing ever writes a style
+     * attribute on them. The video's `!important` is there because the PAGE'S
+     * element arrives carrying the page's inline sizing. */
+    ".pip-bar{position:absolute;left:0;right:0;bottom:0;display:flex;gap:8px;" +
+    "align-items:center;padding:8px 10px;background:rgba(0,0,0,.62);" +
+    "opacity:0;transition:opacity .15s ease}" +
+    ".pip-stage:hover .pip-bar,.pip-bar:focus-within{opacity:1}" +
+    ".pip-btn{appearance:none;border:0;border-radius:4px;background:rgba(255,255,255,.14);" +
+    "color:#fff;font:inherit;padding:4px 9px;cursor:pointer;min-width:34px}" +
+    ".pip-btn:hover{background:rgba(255,255,255,.26)}" +
+    ".pip-btn:focus{outline:2px solid #1677ff;outline-offset:2px}" +
+    ".pip-time{margin-left:auto;font-variant-numeric:tabular-nums;opacity:.85}" +
+    /* Cues are painted by the UA inside the video box, so they are not styleable
+     * from the page's sheet — but they ARE from this document's, and the UA
+     * default is small and unbacked over a bright frame. */
+    "video::cue{font-size:14px;background:rgba(0,0,0,.72)}";
 
   try {
     const sheet = new (win as unknown as { CSSStyleSheet: typeof CSSStyleSheet }).CSSStyleSheet();
@@ -136,7 +172,84 @@ export function enhanceWindow(input: { win?: Window | null; opts: EnhanceOptions
   doc.body.appendChild(stage);
   stage.appendChild(video);
 
+  /* SUBTITLES BEFORE CONTROLS. Showing the track can make the UA lay cues out
+   * inside the video box, and the bar is positioned over that box — doing it in
+   * this order means the first frame the user sees is already the final one.
+   *
+   * FIRST subtitles-or-captions track only, and `break`. Turning on all of them
+   * paints two languages over each other; "captions" is the same feature under
+   * the other kind, and skipping "metadata"/"chapters" matters because showing
+   * one of those paints raw cue text across the frame. `textTracks` is guarded
+   * because a <video> whose source is a MediaStream may not expose one. */
+  const tracks = video.textTracks;
+  if (opts.subtitles && tracks) {
+    for (let i = 0; i < tracks.length; i++) {
+      if (tracks[i].kind === "subtitles" || tracks[i].kind === "captions") {
+        const track = tracks[i];
+        track.mode = "showing";
+        /* LIFT THE CUES ABOVE THE CONTROL BAR.
+         *
+         * Cues render at the BOTTOM of the video box by default, which is
+         * exactly where the bar sits. With both Pro switches on, the cue text
+         * and the buttons draw on top of each other and neither is readable.
+         * FOUND BY LOOKING AT A SCREENSHOT — every computed-style assertion in
+         * dpip-controls.spec.ts passed while this was happening, because each
+         * element is individually correct and only their overlap is wrong.
+         *
+         * `line` is the only lever: ::cue is a pseudo-element and CSS gives it
+         * no positioning properties, so this cannot be fixed in the stylesheet.
+         * A negative value counts lines up from the bottom, so -3 clears a
+         * ~37px bar at the 14px ::cue size with a margin to spare. Applied on
+         * cuechange as well as now, because cues stream in after load and each
+         * arrives with its own default line.
+         *
+         * Only when the bar is actually there — with controls off, the default
+         * bottom position is the right one and moving cues would be a
+         * regression against every other player's placement. */
+        if (opts.inWindowControls) {
+          const lift = function () {
+            const cues = track.cues;
+            if (!cues) return;
+            let changed = false;
+            for (let c = 0; c < cues.length; c++) {
+              const cue = cues[c] as VTTCue;
+              if (cue.line !== -3) {
+                cue.line = -3;
+                changed = true;
+              }
+            }
+            /* THE MODE TOGGLE IS THE FIX, NOT BELT-AND-BRACES.
+             *
+             * Measured: setting `line` on a cue that is ALREADY ACTIVE updates
+             * the property but does not re-flow the rendered box — a probe read
+             * back `line: -3, snapToLines: true` while the screenshot still
+             * showed the cue sitting on top of the buttons. Chrome lays the cue
+             * out when it becomes active and does not watch it afterwards.
+             * Toggling the track's mode forces that layout to be redone.
+             *
+             * `changed` is what makes this terminate: the toggle re-fires
+             * cuechange, the second pass finds every line already -3, and it
+             * stops. Without the guard this is an infinite loop. */
+            if (changed && track.mode === "showing") {
+              track.mode = "hidden";
+              track.mode = "showing";
+            }
+          };
+          lift();
+          track.addEventListener("cuechange", lift);
+        }
+        break;
+      }
+    }
+  }
+
+  // Returns its own teardown: the video goes home on restore, the bar's
+  // document does not, and listeners left bound to the page's element would
+  // keep firing into a torn-down window once per PiP session, forever.
+  const detach = opts.inWindowControls ? buildControls(doc, stage, video) : null;
+
   const restore = function () {
+    if (detach) detach();
     const h = (window as unknown as { __pipHome?: { parent: Node | null; next: Node | null } })
       .__pipHome;
     if (h && h.parent) h.parent.insertBefore(video, h.next);
@@ -146,4 +259,108 @@ export function enhanceWindow(input: { win?: Window | null; opts: EnhanceOptions
   };
   win.addEventListener("pagehide", restore);
   return { restore: restore };
+
+  /* ------------------------------------------------------------------------
+   * NESTED ON PURPOSE — RULE 1. This is a function DECLARATION inside
+   * enhanceWindow's body, so it is hoisted (the call above it is fine) and it
+   * travels inside the source text executeScript ships. Lifted to module scope
+   * it would compile, pass every unit test that imports the module, and
+   * ReferenceError in the user's browser.
+   * ----------------------------------------------------------------------*/
+  function buildControls(d: Document, mount: HTMLElement, v: HTMLVideoElement): () => void {
+    const bar = d.createElement("div");
+    bar.className = "pip-bar";
+
+    const button = function (id: string, label: string, aria: string, onClick: () => void) {
+      const b = d.createElement("button");
+      b.className = "pip-btn";
+      b.type = "button";
+      b.textContent = label;
+      b.setAttribute("aria-label", aria);
+      /* A STABLE HOOK ALONGSIDE THE MOVING LABEL. The play button's aria-label
+       * is the name of the ACTION and therefore has to flip between "Play" and
+       * "Pause" as playback changes — a button that announces "Pause" while it
+       * would start playback misinforms exactly the users who depend on it
+       * most. That makes aria-label useless as a SELECTOR, because what it says
+       * depends on when you look. data-pip never changes, so tests and any
+       * later feature address the controls by it and the label stays free to
+       * tell the truth. */
+      b.setAttribute("data-pip", id);
+      b.addEventListener("click", onClick);
+      bar.appendChild(b);
+      return b;
+    };
+
+    const play = button("play", "❚❚", "Pause", function () {
+      if (v.paused) void v.play();
+      else v.pause();
+    });
+    button("back", "−10s", "Back ten seconds", function () {
+      v.currentTime = Math.max(0, v.currentTime - 10);
+    });
+    button("forward", "+10s", "Forward ten seconds", function () {
+      v.currentTime = v.currentTime + 10;
+    });
+    const speed = button("speed", "1×", "Playback speed", function () {
+      /* NOT `steps.indexOf(v.playbackRate)`. indexOf returns -1 for any rate
+       * that is not in this list — and a site can set one: 1.75 is on YouTube's
+       * own menu and on most HTML5 player menus. `(-1 + 1) % 5` is 0, so the
+       * user's first press on a 1.75x video SLOWS IT DOWN to 1x with nothing to
+       * explain why, and the same press on a 3x video does too.
+       *
+       * "Smallest step strictly greater than the current rate, wrapping to the
+       * smallest step" is the identical cycle for every on-list rate — the list
+       * 1, 1.25, 1.5, 2, 0.5 is a rotation of its own sorted order, which is
+       * what makes that true — and it is DEFINED for every off-list one: 1.75
+       * goes up to 2, 3 wraps to 0.5. It also does not depend on an exact
+       * float match, so a rate the browser rounded still advances. */
+      const steps = [0.5, 1, 1.25, 1.5, 2];
+      let next = steps[0];
+      for (let i = 0; i < steps.length; i++) {
+        if (steps[i] > v.playbackRate) {
+          next = steps[i];
+          break;
+        }
+      }
+      v.playbackRate = next;
+      sync();
+    });
+
+    const time = d.createElement("span");
+    time.className = "pip-time";
+    bar.appendChild(time);
+
+    const fmt = function (s: number): string {
+      // captureStream() and every real live stream report Infinity, and
+      // currentTime is NaN before metadata lands. Both would render "NaN:NaN".
+      if (!isFinite(s)) return "live";
+      const m = Math.floor(s / 60);
+      const r = Math.floor(s % 60);
+      return m + ":" + (r < 10 ? "0" : "") + r;
+    };
+    const sync = function () {
+      play.textContent = v.paused ? "▶" : "❚❚";
+      play.setAttribute("aria-label", v.paused ? "Play" : "Pause");
+      // Read BACK off the element rather than echoing what was assigned: the UA
+      // clamps playbackRate, and a readout that reported the request instead of
+      // the result would be confidently wrong at the edges.
+      const rate = isFinite(v.playbackRate) ? v.playbackRate : 1;
+      speed.textContent = rate + "×";
+      time.textContent = fmt(v.currentTime) + " / " + fmt(v.duration);
+    };
+    // `ratechange` is here and not only in the speed handler because the PAGE
+    // can change the rate too — the bar has to follow the video, not its own
+    // last click.
+    const events = ["timeupdate", "play", "pause", "ratechange"];
+    for (let i = 0; i < events.length; i++) v.addEventListener(events[i], sync);
+    // Called before the bar is mounted so the first painted frame already shows
+    // the video's REAL state — a hardcoded "1×" over a video the site started
+    // at 1.5x is a confident lie about the one thing the readout is for.
+    sync();
+
+    mount.appendChild(bar);
+    return function () {
+      for (let i = 0; i < events.length; i++) v.removeEventListener(events[i], sync);
+    };
+  }
 }

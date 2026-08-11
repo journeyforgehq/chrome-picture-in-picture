@@ -36,6 +36,11 @@ import { defineConfig } from "@playwright/test";
 //                                       documentPictureInPicture.requestWindow(),
 //                                       and the computed style of the window it
 //                                       opens.
+//                                     dpip-controls.spec.ts — what enhanceWindow
+//                                       DRAWS in that window: the control bar's
+//                                       computed style, its hover/focus reveal,
+//                                       its geometry, and the buttons acting on
+//                                       the moved video.
 //
 // gesture.spec.ts lives here rather than in a fourth config because it needs
 // the same two things detection needs and nothing else: these self-served
@@ -58,6 +63,15 @@ import { defineConfig } from "@playwright/test";
 // silently lost) by the other two. That is the same reasoning that keeps this
 // from becoming a fifth config: a per-file need gets a per-file declaration.
 //
+// dpip-controls.spec.ts joins on the same test and fails it the same way — it
+// serves one more self-served fixture from the same e2e/serve.ts and drives the
+// same shipped functions through the same addInitScript round trip. It carries
+// the SAME two per-file declarations dpip-visual does (viewport: null and
+// channel: "chromium"), and they are repeated in that file rather than hoisted
+// here for exactly the reason given above: hoisting them would let the other
+// specs inherit an environment they never asked for, and would let this one
+// lose its own without anything failing.
+//
 // Deliberately NO globalSetup and NO webServer. Neither spec needs the wrangler
 // worker or the preview gallery, and this is the suite that gets run hundreds
 // of times while fixtures are written — a wrangler dependency would make it
@@ -72,7 +86,7 @@ import { defineConfig } from "@playwright/test";
 // fixtures.
 export default defineConfig({
   testDir: "./e2e",
-  testMatch: "**/{detection,gesture,dpip-visual}.spec.ts",
+  testMatch: "**/{detection,gesture,dpip-visual,dpip-controls}.spec.ts",
   workers: 1,
   fullyParallel: false,
   timeout: 30_000,
