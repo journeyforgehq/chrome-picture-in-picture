@@ -436,6 +436,26 @@ test.describe("the in-window control bar @dpip", () => {
     await open(page);
     await openAndEnhance(page);
 
+    /* WAIT FOR THE CUES TO EXIST BEFORE READING THEM.
+     *
+     * TextTrack cues populate asynchronously — the track's VTT has to parse
+     * before `track.cues` is non-empty, and `mode: "showing"` is set by
+     * enhanceWindow immediately, so it is true well before the cues are there.
+     * Reading once, as this test originally did, was a race: it failed two of
+     * four full runs with `cues.length` 0 while passing in isolation every
+     * time, because running alone gave the parse enough slack.
+     *
+     * Waiting on the cues themselves — not a timeout, not a settle — is what
+     * makes the assertions below measure the LIFT rather than the parse. */
+    await page.waitForFunction(
+      () => {
+        const track = window.__pipWin?.document.querySelector("video")?.textTracks[0];
+        return !!track && !!track.cues && track.cues.length > 0;
+      },
+      undefined,
+      { timeout: 5000 }
+    );
+
     const cues = await page.evaluate(() => {
       const t = window.__pipWin!.document.querySelector("video")!.textTracks[0];
       const out: { line: number | "auto"; snap: boolean; text: string }[] = [];
