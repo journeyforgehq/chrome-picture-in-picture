@@ -102,7 +102,7 @@ export function Options() {
    * a synchronous-dispatch unit test in test/options/options.test.tsx and by
    * manual QA — not by e2e.
    * ========================================================================*/
-  function handleSettingChange(key: keyof PipSettings, value: boolean) {
+  function handleSettingChange<K extends keyof PipSettings>(key: K, value: PipSettings[K]) {
     if (key === "embeddedPlayers") {
       if (value) {
         chrome.permissions.request(ALL_URLS).then((granted) => {
@@ -123,7 +123,7 @@ export function Options() {
       return;
     }
 
-    void persist({ [key]: value } as Partial<PipSettings>);
+    void persist({ [key]: value } as Pick<PipSettings, K>);
   }
 
   async function persist(patch: Partial<PipSettings>) {

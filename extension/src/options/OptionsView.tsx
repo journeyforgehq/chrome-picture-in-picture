@@ -1,11 +1,12 @@
 import React from "react";
-import { Typography, Switch, Button, Alert, Space } from "antd";
+import { Typography, Switch, Select, Button, Alert, Space } from "antd";
 import {
   PlanBadge,
   TierBadge,
   RestoreForm,
   UpgradePaywall,
   PaymentNudge,
+  LockedFeature,
   type PaywallPlan,
 } from "../ui-kit";
 import type { PipSettings } from "../pip/state";
@@ -20,7 +21,13 @@ export interface OptionsViewProps {
   status?: PaidStatus;
   manageBillingHref?: string;
   settings: PipSettings;
-  onSettingChange: (key: keyof PipSettings, value: boolean) => void;
+  /* GENERIC, not `boolean | string`. `keyof PipSettings` now includes
+   * `windowSize: SizePreset`, so the old `value: boolean` signature was unsound
+   * the moment Task 4 landed — and options.tsx launders the value through
+   * `as Partial<PipSettings>`, which would have written a boolean into
+   * windowSize with no error anywhere. Binding the value type to the key closes
+   * that: onSettingChange("windowSize", true) now fails to compile. */
+  onSettingChange: <K extends keyof PipSettings>(key: K, value: PipSettings[K]) => void;
   /** Opens chrome://extensions/shortcuts. A plain anchor cannot — see the
    *  comment on the button that calls this. */
   onOpenShortcuts: () => void;
@@ -63,7 +70,12 @@ const STYLES = `
   padding: 20px 0;
   border-top: 1px solid rgba(5, 5, 5, 0.06);
 }
-.pip-options__row:first-of-type { border-top: none; padding-top: 8px; }
+/* CHILD combinator, deliberately. :first-of-type is scoped to the parent, and
+   on free the four Pro rows sit inside LockedFeature's <fieldset> — so an
+   unscoped rule makes "Enhanced window" first-of-type THERE and strips its
+   divider on free while keeping it on pro. Same page, two different rules,
+   depending on tier. Only the real first row (Keyboard shortcut) may lose it. */
+.pip-options > .pip-options__row:first-of-type { border-top: none; padding-top: 8px; }
 .pip-options__text { flex: 1 1 auto; min-width: 0; }
 .pip-options__control { flex: 0 0 auto; padding-top: 2px; }
 .pip-options__wide { display: block; }
@@ -129,7 +141,13 @@ function Row({
  * first, so the request cannot live behind an async boundary here.
  *
  * The four Pro feature rows (enhanced window, window size, in-window controls,
- * subtitles) belong to a later plan and are deliberately absent.
+ * subtitles) render at EVERY tier, wrapped in a single LockedFeature. On free
+ * that means a disabled <fieldset> at half opacity behind an Unlock overlay —
+ * genuinely non-interactive, not merely dimmed — but still legible. Hiding them
+ * on free would be the easy alternative and the wrong one: a user who cannot
+ * see what Pro contains has no reason to want it, and the enhanced window's
+ * one real trade-off (a title bar) belongs on the row itself rather than only
+ * inside a paywall they may never open.
  */
 export function OptionsView({
   tier,
@@ -218,6 +236,93 @@ export function OptionsView({
           />
         }
       />
+
+      <LockedFeature locked={tier !== "pro"} onUnlock={onOpenPaywall}>
+        <Row
+          label="Enhanced window"
+          help={
+            <>
+              Opens the floating video in a window you can size, with controls inside it.{" "}
+              <Text strong>It carries a small title bar showing the site&apos;s domain</Text> — the
+              standard window has none. Leave this off to keep the chrome-free one.
+            </>
+          }
+          control={
+            <Switch
+              aria-label="Enhanced window"
+              checked={settings.enhancedWindow}
+              onChange={(checked) => onSettingChange("enhancedWindow", checked)}
+            />
+          }
+        />
+
+        <Row
+          label="Window size"
+          help="The size the enhanced window opens at, and whether each site keeps its own."
+          control={
+            <Select
+              aria-label="Window size"
+              value={settings.windowSize}
+              /* 176, not the 132 this row was drafted with. MEASURED, twice,
+               * because the first correction was still too small: antd's
+               * selection item reserves 18px on the end for the arrow, so a
+               * 132px Select left the label 90px against the 123.3px the
+               * widest option needs, and the CURRENT VALUE — the one thing
+               * this control exists to report — ellipsised to "Medium · 4…"
+               * at both viewports. `scrollWidth` on the item reads 141; 176
+               * gives it 152 and still fits the 375px column with room for a
+               * wider system font than this machine's. */
+              style={{ width: 176 }}
+              onChange={(v) => onSettingChange("windowSize", v)}
+              options={[
+                { value: "small", label: "Small · 320×180" },
+                { value: "medium", label: "Medium · 400×225" },
+                { value: "large", label: "Large · 640×360" },
+              ]}
+            />
+          }
+        >
+          <div style={{ marginTop: 10 }}>
+            <Switch
+              size="small"
+              aria-label="Remember size per site"
+              checked={settings.rememberSizePerSite}
+              onChange={(checked) => onSettingChange("rememberSizePerSite", checked)}
+            />{" "}
+            <Text style={{ fontSize: 13 }}>Remember the size for each site</Text>
+          </div>
+        </Row>
+
+        <Row
+          label="In-window controls"
+          help={
+            <>
+              Play, pause, seek and speed, drawn inside the floating window. Worth having:{" "}
+              <Text strong>keyboard shortcuts do not reach a floating window</Text> once you have
+              clicked it, so these are the only controls available at that moment.
+            </>
+          }
+          control={
+            <Switch
+              aria-label="In-window controls"
+              checked={settings.inWindowControls}
+              onChange={(checked) => onSettingChange("inWindowControls", checked)}
+            />
+          }
+        />
+
+        <Row
+          label="Subtitles"
+          help="Turn on the video's own subtitle track when the enhanced window opens, if it has one."
+          control={
+            <Switch
+              aria-label="Subtitles"
+              checked={settings.subtitles}
+              onChange={(checked) => onSettingChange("subtitles", checked)}
+            />
+          }
+        />
+      </LockedFeature>
 
       <Row
         label="Your plan"

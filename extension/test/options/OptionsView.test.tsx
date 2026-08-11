@@ -15,9 +15,11 @@ const PLANS: PaywallPlan[] = [
 
 const SOURCE_URL = "https://example.invalid/source";
 
-/** The four rows that belong to the LATER Pro plan. None of these labels may
- * appear on the v1 free options page, at any tier. */
-const PRO_ROW_LABELS = [/enhanced window/i, /window size/i, /in-window controls/i, /subtitles/i];
+/** The four Pro rows. They render at EVERY tier — locked on free, live on pro.
+ * They used to be absent at both, which is what this file asserted until the
+ * Pro tier landed; a locked row that still says what you'd get is the point.
+ * Their behaviour lives in test/options/options-pro.test.tsx. */
+const PRO_ROW_LABELS = ["Enhanced window", "Window size", "In-window controls", "Subtitles"];
 
 function renderOptions(overrides: Partial<React.ComponentProps<typeof OptionsView>> = {}) {
   const props: React.ComponentProps<typeof OptionsView> = {
@@ -44,29 +46,39 @@ function renderOptions(overrides: Partial<React.ComponentProps<typeof OptionsVie
 }
 
 describe("OptionsView — rows", () => {
-  it("renders exactly the five v1 rows, in order", () => {
+  it("renders exactly the nine rows, in order", () => {
     renderOptions();
     const rows = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
     expect(rows).toEqual([
       "Keyboard shortcut",
       "Support embedded players",
       "Show status messages",
+      "Enhanced window",
+      "Window size",
+      "In-window controls",
+      "Subtitles",
       "Your plan",
       "Restore purchase",
     ]);
   });
 
-  it("shows none of the four Pro feature rows on free", () => {
+  it("shows all four Pro feature rows on free", () => {
     renderOptions({ tier: "free" });
     for (const label of PRO_ROW_LABELS) {
-      expect(screen.queryByText(label)).not.toBeInTheDocument();
+      // By ROLE, not by text: "enhanced window" also appears inside two of the
+      // neighbouring rows' help paragraphs, so a text query matches three nodes
+      // and throws. The row is its <h3>.
+      expect(screen.getByRole("heading", { level: 3, name: label })).toBeInTheDocument();
     }
   });
 
-  it("shows none of the four Pro feature rows on pro either", () => {
+  it("shows all four Pro feature rows on pro too", () => {
     renderOptions({ tier: "pro" });
     for (const label of PRO_ROW_LABELS) {
-      expect(screen.queryByText(label)).not.toBeInTheDocument();
+      // By ROLE, not by text: "enhanced window" also appears inside two of the
+      // neighbouring rows' help paragraphs, so a text query matches three nodes
+      // and throws. The row is its <h3>.
+      expect(screen.getByRole("heading", { level: 3, name: label })).toBeInTheDocument();
     }
   });
 });

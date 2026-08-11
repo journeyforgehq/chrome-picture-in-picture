@@ -82,15 +82,93 @@ for (const vp of [
     const card = page.locator('[data-testid="optionsview-free"]');
     await expect(card).toBeVisible();
 
-    // All five rows actually painted, in order — and none of the four Pro rows.
+    // All nine rows actually painted, in order — the four Pro rows included.
+    // They render at every tier: locked on free, live on pro.
     await expect(card.locator(".pip-options__row h3")).toHaveText([
       "Keyboard shortcut",
       "Support embedded players",
       "Show status messages",
+      "Enhanced window",
+      "Window size",
+      "In-window controls",
+      "Subtitles",
       "Your plan",
       "Restore purchase",
     ]);
     await expect(card.getByTestId("tier-badge")).toHaveText("Free");
+
+    /* ------------------------------------------------------------------
+     * THE LOCK, MEASURED — not inferred from the markup being present.
+     *
+     * LockedFeature dims to `opacity: 0.5` and disables a <fieldset>. Both are
+     * invisible to a DOM-presence assertion: `getByRole('switch')` finds the
+     * enhanced-window switch identically whether the lock rendered or not, and
+     * a `disabled` attribute on the fieldset says nothing about whether the
+     * dimming or the overlay actually painted. So: read the opacity, and
+     * require the Unlock affordance to be VISIBLE (not merely attached — an
+     * overlay at zero height would still be in the DOM).
+     *
+     * `opacity` is not read with evaluate(): see trap 1 in the header. It is
+     * not transitioned by antd here, but toHaveCSS costs nothing and the next
+     * person adding a transition should not have to rediscover the trap.
+     * ----------------------------------------------------------------*/
+    const lock = card.locator(".ui-kit-locked-feature");
+    await expect(lock).toBeVisible();
+    await expect(lock.locator("fieldset")).toHaveCSS("opacity", "0.5");
+    await expect(lock.locator("fieldset")).toHaveAttribute("disabled", "");
+    const unlock = lock.getByRole("button", { name: /unlock/i });
+    await expect(unlock).toBeVisible();
+    // The overlay must actually cover the rows it is gating, or the "genuinely
+    // non-interactive" claim rests on the fieldset alone.
+    const overlayBox = await lock.locator(".ui-kit-locked-feature-overlay").boundingBox();
+    const fieldsetBox = await lock.locator("fieldset").boundingBox();
+    // eslint-disable-next-line no-console
+    console.log(`[${vp.name}] locked overlay ${JSON.stringify(overlayBox)} over ${JSON.stringify(fieldsetBox)}`);
+    expect(overlayBox!.height).toBeGreaterThanOrEqual(fieldsetBox!.height - 1);
+
+    // The disabled fieldset is what makes the dimming more than cosmetic. A
+    // FORCED click — actionability checks skipped, real mouse events at the
+    // switch's own coordinates, which is what a user's finger does — must not
+    // flip it. (It lands on the overlay, well above the centred Unlock button.)
+    const enhanced = card.getByRole("switch", { name: "Enhanced window" });
+    await expect(enhanced).toBeDisabled();
+    await expect(enhanced).toHaveAttribute("aria-checked", "false");
+    await enhanced.click({ force: true });
+    await expect(enhanced).toHaveAttribute("aria-checked", "false");
+    // ...and nothing opened the paywall by accident, which would scrim the shot.
+    await expect(page.locator(".ant-modal-mask")).toBeHidden();
+    await page.mouse.move(0, 0);
+
+    /* ---- and the Pro card, where the same rows must be LIVE --------------
+     * Asserting only the locked state would pass just as well if the rows were
+     * hard-locked for everyone, which is the actual failure a paying user would
+     * hit. */
+    const proCard = page.locator('[data-testid="optionsview-pro"]');
+    await expect(proCard.locator(".ui-kit-locked-feature")).toHaveCount(0);
+    await expect(proCard.locator("fieldset")).toHaveCount(0);
+    const proEnhanced = proCard.getByRole("switch", { name: "Enhanced window" });
+    await expect(proEnhanced).toBeEnabled();
+    const proSize = proCard.getByRole("combobox", { name: "Window size" });
+    await expect(proSize).toBeVisible();
+    /* toHaveText alone is exactly the DOM-presence trap this file exists to
+     * refuse: `textContent` is the FULL string whether or not antd ellipsised
+     * it on screen. It did — the row was drafted at `width: 132` and shipped
+     * "Medium · 4…" past every unit test in the repo, because the setting's
+     * current value being unreadable is invisible to the DOM. So assert the
+     * text AND that it is not overflowing its box. */
+    const value = proCard.locator(".ant-select-selection-item");
+    await expect(value).toHaveText("Medium · 400×225");
+    const fits = await value.evaluate((el) => ({ s: el.scrollWidth, c: el.clientWidth }));
+    // eslint-disable-next-line no-console
+    console.log(`[${vp.name}] window-size value scrollWidth=${fits.s} clientWidth=${fits.c}`);
+    expect(fits.s).toBeLessThanOrEqual(fits.c);
+    // The Select must not push the row past the 560px column — the reason the
+    // mobile viewport is in this loop at all.
+    const selectBox = await proCard.locator(".ant-select").boundingBox();
+    const cardBox = await proCard.locator(".pip-options").boundingBox();
+    // eslint-disable-next-line no-console
+    console.log(`[${vp.name}] window-size Select ${JSON.stringify(selectBox)} inside ${JSON.stringify(cardBox)}`);
+    expect(selectBox!.x + selectBox!.width).toBeLessThanOrEqual(cardBox!.x + cardBox!.width + 1);
 
     const embedded = card.getByRole("switch", { name: "Support embedded players" });
     await expect(embedded).toBeVisible();
