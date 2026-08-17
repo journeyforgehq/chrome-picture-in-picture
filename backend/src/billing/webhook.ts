@@ -17,6 +17,7 @@ const EVENT_TTL_SEC = 3 * 86400; // 3 days
 export type Action =
   | { type: "grant"; deviceId: string | null; customerId: string; email: string; plan: Plan; subId: string | null }
   | { type: "revoke"; subId: string | null; customerId: string }
+  | { type: "revoke_by_charge"; chargeId: string }
   | { type: "renew"; customerId: string; periodEnd: number }
   | { type: "past_due"; customerId: string }
   | { type: "invoice_paid"; customerId: string; periodEnd: number }
@@ -25,6 +26,24 @@ export type Action =
 function custId(c: unknown): string {
   if (!c) return "";
   return typeof c === "string" ? c : (c as { id: string }).id;
+}
+
+/**
+ * Resolve the customer behind a charge. Stripe's Dispute object has no customer
+ * field, so a chargeback can only be attributed by retrieving the charge it
+ * disputes. Returns "" on any failure — the caller logs and revokes nothing,
+ * which is strictly better than revoking the wrong customer.
+ */
+async function customerIdFromCharge(env: Env, chargeId: string): Promise<string> {
+  const res = await fetch(`https://api.stripe.com/v1/charges/${encodeURIComponent(chargeId)}`, {
+    headers: { Authorization: `Bearer ${env.STRIPE_SECRET_KEY}` },
+  });
+  if (!res.ok) {
+    logError("webhook", { event: "charge_lookup_failed", charge: chargeId, status: res.status });
+    return "";
+  }
+  const charge = (await res.json()) as { customer?: unknown };
+  return custId(charge.customer);
 }
 
 /** Pure event → action mapping (spec §6). */
@@ -68,11 +87,17 @@ export function actionFromEvent(event: any): Action {
   // Full refunds and chargebacks revoke. A PARTIAL refund (refunded !== true) is a
   // no-op: revoking on a goodwill partial refund destroys a paying customer's
   // access and generates the dispute the refund was meant to prevent.
-  if (
-    (event?.type === "charge.refunded" && obj.refunded === true) ||
-    event?.type === "charge.dispute.created"
-  ) {
+  if (event?.type === "charge.refunded" && obj.refunded === true) {
     return { type: "revoke", subId: null, customerId: custId(obj.customer) };
+  }
+  if (event?.type === "charge.dispute.created") {
+    // Stripe's Dispute object carries NO customer field — only `charge` and
+    // `payment_intent`. A chargeback can only be attributed by retrieving the
+    // charge it disputes, which is an API call, so it happens in applyAction:
+    // this function is pure by contract.
+    const charge = obj.charge;
+    const chargeId = typeof charge === "string" ? charge : (charge && charge.id) || "";
+    return { type: "revoke_by_charge", chargeId };
   }
   return { type: "ignore" };
 }
@@ -128,6 +153,23 @@ export async function applyAction(env: Env, action: Action, nowSec: number): Pro
       if (action.periodEnd > 0) f.periodEnd = action.periodEnd;
     });
     logInfo("webhook", { event: "invoice_paid", cust: action.customerId, devices, periodEnd: action.periodEnd });
+  }
+  // Last branch in the function: it returns early on the unattributable cases,
+  // and the other branches above are sequential `if`s that must all get a look.
+  if (action.type === "revoke_by_charge") {
+    if (!action.chargeId) {
+      logError("webhook", { event: "dispute_no_charge" });
+      return;
+    }
+    const customerId = await customerIdFromCharge(env, action.chargeId);
+    if (!customerId) {
+      logError("webhook", { event: "dispute_unattributed", charge: action.chargeId });
+      return;
+    }
+    const devices = await forEachCustomerDevice(env, customerId, (f) => {
+      f.status = "canceled";
+    });
+    logInfo("webhook", { event: "revoke", reason: "dispute", cust: customerId, devices });
   }
 }
 
