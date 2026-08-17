@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><title>E07 — embed WITHOUT allow=</title><body>
+<!-- E06 minus the allow= attribute, and nothing else. The pair exists to MEASURE
+     whether allow="picture-in-picture" changes anything: the Permissions Policy
+     default allowlist for picture-in-picture is *, so it should not, and any
+     future divergence between these two rows in the golden is the browser
+     changing that default under us. -->
+<iframe src="http://127.0.0.1:3001/_embed-child.html"
+        width="640" height="360" style="border:0"></iframe>
+<script type="module">
+  import { ready } from "./lib/harness.js";
+  addEventListener("load", ready);
+</script>

@@ -1,0 +1,116 @@
+
+> template-extension@0.1.0 verify
+> npm run typecheck && npm run test && npm run build
+
+
+> template-extension@0.1.0 typecheck
+> tsc --noEmit
+
+
+> template-extension@0.1.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /Users/oleksiiostapiuk/projects/chrome/picture-in-picture/extension
+
+ ✓ test/billing/chrome-storage.test.ts (7 tests) 4ms
+ ✓ test/entitlement.test.ts (13 tests) 13ms
+ ✓ test/harness/webhook.test.ts (10 tests) 5ms
+ ✓ test/config.test.ts (6 tests) 9ms
+ ✓ test/ui-kit/RestoreForm.test.tsx (8 tests) 722ms
+   ✓ RestoreForm > calls onRestore with the entered email on submit 364ms
+ ✓ test/ui-kit/UpgradePaywall.test.tsx (7 tests) 702ms
+ ✓ test/popup/PopupView.test.tsx (6 tests) 640ms
+ ✓ test/background.test.ts (10 tests) 4ms
+ ✓ test/popup/popup.test.tsx (4 tests) 774ms
+   ✓ Popup container > onCheckout opens the checkout URL via chrome.tabs.create 533ms
+ ✓ test/device-id.test.ts (5 tests) 2ms
+ ✓ test/manifest.test.ts (6 tests) 4ms
+ ✓ test/options/options.test.tsx (4 tests) 1494ms
+   ✓ Options container > calls entitlement.restore(email) then reflects the RestoreResult in state 620ms
+   ✓ Options container > a successful restore updates the displayed tier 600ms
+ ✓ test/plans.test.ts (2 tests) 2ms
+ ✓ src/billing/entitlement.test.ts (3 tests) 4ms
+ ✓ test/options/OptionsView.test.tsx (7 tests) 1185ms
+   ✓ OptionsView > wires the RestoreForm's submit to onRestore(email) 566ms
+ ✓ test/checkout.test.ts (4 tests) 18ms
+ ✓ test/billing-integration.test.ts (1 test) 2ms
+ ✓ test/icons.test.ts (3 tests) 51ms
+ ✓ test/harness/config.test.ts (5 tests) 2ms
+ ✓ test/ui-kit/LockedFeature.test.tsx (5 tests) 215ms
+ ✓ test/scripts.test.ts (1 test) 2ms
+ ✓ test/content.test.ts (3 tests) 1ms
+ ✓ test/ui-kit/TierBadge.test.tsx (4 tests) 141ms
+ ✓ test/ui-kit/PlanBadge.test.tsx (4 tests) 129ms
+ ✓ test/ui-kit/theme.test.tsx (5 tests) 88ms
+ ✓ test/contract-sync.test.ts (1 test) 1ms
+ ✓ test/react-smoke.test.tsx (1 test) 10ms
+ ✓ test/smoke.test.ts (1 test) 2ms
+ ✓ test/ui-kit/PaymentNudge.test.tsx (2 tests) 71ms
+ ✓ test/ui-kit/index.test.ts (2 tests) 3ms
+ ✓ test/webpack-preview-config.test.ts (1 test) 5874ms
+   ✓ webpack.preview.cjs > builds the gallery entry to dist-preview/ without errors 5874ms
+ ✓ test/separation.test.ts (2 tests) 11587ms
+   ✓ content-script/ui-kit separation guard > passes on the real build: content chunk stays antd-free 10214ms
+   ✓ content-script/ui-kit separation guard > FAILS the build when the content entry transitively imports ui-kit 1372ms
+ ✓ test/webpack-config.test.ts (5 tests) 21069ms
+   ✓ webpack.prod.cjs > builds background.js and content.js with no errors 12772ms
+   ✓ webpack.prod.cjs > builds popup.js/options.js/popup.html/options.html alongside background/content 5993ms
+   ✓ webpack.dev.cjs > builds successfully with inline source maps 2302ms
+
+ Test Files  33 passed (33)
+      Tests  148 passed (148)
+   Start at  00:33:27
+   Duration  21.66s (transform 394ms, setup 1.81s, collect 24.90s, tests 44.83s, environment 6.64s, prepare 2.11s)
+
+
+> template-extension@0.1.0 build
+> webpack --config webpack/webpack.prod.cjs
+
+assets by path *.js 1.2 MiB
+  assets by status 1.2 MiB [big]
+    asset options.js 652 KiB [emitted] [minimized] [big] (name: options) 1 related asset
+    asset popup.js 576 KiB [emitted] [minimized] [big] (name: popup) 1 related asset
+  asset background.js 722 bytes [emitted] [minimized] (name: background)
+  asset content.js 133 bytes [emitted] [minimized] (name: content)
+assets by path icons/*.png 597 bytes
+  asset icons/icon-128.png 359 bytes [emitted] [from: src/static/icons/icon-128.png] [copied]
+  asset icons/icon-48.png 156 bytes [emitted] [from: src/static/icons/icon-48.png] [copied]
+  asset icons/icon-16.png 82 bytes [emitted] [from: src/static/icons/icon-16.png] [copied]
+assets by path *.html 427 bytes
+  asset options.html 221 bytes [emitted]
+  asset popup.html 206 bytes [emitted]
+asset manifest.json 767 bytes [emitted] [from: src/static/manifest.json] [copied]
+orphan modules 3.72 MiB [orphan] 2264 modules
+runtime modules 5.86 KiB 14 modules
+cacheable modules 2.82 MiB
+  modules by path ./node_modules/ 151 KiB
+    modules by path ./node_modules/react/ 8 KiB 4 modules
+    modules by path ./node_modules/react-dom/ 131 KiB 3 modules
+    modules by path ./node_modules/scheduler/ 4.33 KiB 2 modules
+    modules by path ./node_modules/rc-util/ 2.4 KiB 2 modules
+    + 3 modules
+  modules by path ./src/ 2.67 MiB
+    ./src/background/background.ts + 1 modules 4.02 KiB [built] [code generated]
+    ./src/content/content.ts 1.03 KiB [built] [code generated]
+    ./src/popup/index.tsx + 527 modules 1.23 MiB [built] [code generated]
+    ./src/options/index.tsx + 595 modules 1.44 MiB [built] [code generated]
+
+WARNING in asset size limit: The following asset(s) exceed the recommended size limit (244 KiB).
+This can impact web performance.
+Assets: 
+  popup.js (576 KiB)
+  options.js (652 KiB)
+
+WARNING in entrypoint size limit: The following entrypoint(s) combined asset size exceeds the recommended limit (244 KiB). This can impact web performance.
+Entrypoints:
+  popup (576 KiB)
+      popup.js
+  options (652 KiB)
+      options.js
+
+WARNING in webpack performance recommendations: 
+You can limit the size of your bundles by using import() or require.ensure to lazy load some parts of your application.
+For more info visit https://webpack.js.org/guides/code-splitting/
+
+webpack 5.108.1 compiled with 3 warnings in 5551 ms

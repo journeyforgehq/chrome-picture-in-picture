@@ -1,0 +1,15 @@
+<!doctype html><meta charset="utf-8"><title>B04 — ambiguous by design</title>
+<style>.push{height:200vh}</style><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // AMBIGUOUS BY DESIGN. A reasonable person could argue either way, and Group A's
+  // A08 already produced this outcome incidentally (playing-offscreen 1500 beat
+  // on-screen paused-muted 800). This fixture exists to make it a DECISION:
+  // playing (+1000) beats a full viewport intersection (+500). If someone later
+  // decides on-screen should win, they must edit this file deliberately.
+  document.body.append(makeVideo({ label: "paused-onscreen", muted: false, playing: false, duration: 600 }));
+  const spacer = document.createElement("div"); spacer.className = "push";
+  document.body.append(spacer);
+  document.body.append(makeVideo({ label: "playing-offscreen", muted: false, duration: 600 }));
+  ready();
+</script>

@@ -1,0 +1,16 @@
+<!doctype html><meta charset="utf-8"><title>E02 — Twitch-shape</title><body>
+<div data-a-target="player"><div data-a-target="video-player">
+  <div data-a-target="video-player-layout"><div id="slot"></div></div>
+</div></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // STRUCTURAL TRAITS: deep data-a-target nesting; duration === Infinity (live);
+  // and a SEPARATE ad element appearing mid-play — the case where picking the
+  // wrong element IS possible, unlike YouTube.
+  const slot = document.getElementById("slot");
+  slot.append(makeVideo({ label: "stream", width: 1280, height: 720, muted: false }));
+  setTimeout(() => {
+    slot.append(makeVideo({ label: "ad-roll", width: 1280, height: 720, muted: true, duration: 15 }));
+  }, 100);
+  setTimeout(ready, 400);
+</script>

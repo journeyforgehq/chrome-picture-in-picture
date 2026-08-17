@@ -1,0 +1,9 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A01 — plain video, main document</title>
+<body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  document.body.append(makeVideo({ label: "only", muted: false }));
+  ready();
+</script>

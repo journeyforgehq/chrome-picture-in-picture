@@ -4,8 +4,13 @@ import { resolve, dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const extRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
-const dist = join(extRoot, "dist");
-const out = join(extRoot, "extension.zip");
+// The shipped defaults are `dist/` -> `extension.zip` at the extension root;
+// nothing but a test ever sets these. test/zip-artifact.test.ts overrides both
+// so it can build and inspect its OWN production dist: several other test files
+// rebuild the shared dist/ concurrently (with `clean`), and reading it here
+// would make the artifact assertions depend on vitest's file scheduling.
+const dist = resolve(extRoot, process.env.ZIP_DIST_DIR || join(extRoot, "dist"));
+const out = resolve(extRoot, process.env.ZIP_OUT || join(extRoot, "extension.zip"));
 
 if (!existsSync(dist)) {
   console.error("dist/ not found — run `npm run build` first.");

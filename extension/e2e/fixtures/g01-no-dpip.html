@@ -1,0 +1,95 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>g01 — documentPictureInPicture absent: the Pro path degrades to native</title>
+<body>
+<!--
+  GROUP G, ROW G01. "documentPictureInPicture absent (stub it out) => falls back
+  to native SILENTLY — not an error."
+
+  This is the fixture for the browser that has not shipped Document PiP, or has
+  it behind a flag the user has not set. The prefs handed to pipEntry below say
+  tier "pro" AND enhancedWindow true — i.e. a PAYING customer who has switched
+  the enhanced window ON — so the ONLY thing standing between this click and the
+  document branch is `supported`, which pipEntry computes as
+  `typeof window.documentPictureInPicture === "object"`.
+
+  THE STUB IS THE FIXTURE. It runs at module evaluation, before the button
+  exists and long before any click, and it reports HOW it removed the API in
+  window.__dpipStubMode so the spec can assert the stub actually took rather
+  than measuring a browser that never had the API in the first place. That
+  distinction matters here more than anywhere else in this directory: a run
+  where the stub silently failed and a run where it worked produce the same
+  green "fell back to native" result for opposite reasons.
+
+  `delete` first, defineProperty second. Which one is needed is a Blink
+  implementation detail (whether the global's attribute is an own configurable
+  accessor or lives on Window.prototype), it is not something this fixture
+  should assume, and the two together cover both shapes. Module scripts are
+  strict, so a `delete` of a non-configurable property THROWS rather than
+  returning false — hence the try/catch.
+
+  As in every other fixture here, __pipEntry is NOT defined on this page. The
+  spec injects it with addInitScript(`... = ${pipEntry.toString()}`), the same
+  Function.prototype.toString() trip chrome.scripting.executeScript makes in
+  production, so this exercises the SHIPPED function and never a copy.
+-->
+<button id="open">Open picture-in-picture</button>
+<div id="stage"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+
+  let mode = "absent-already";
+  if (typeof window.documentPictureInPicture !== "undefined") {
+    mode = "deleted";
+    try {
+      delete window.documentPictureInPicture;
+    } catch (e) {
+      mode = "delete-threw";
+    }
+    if (typeof window.documentPictureInPicture !== "undefined") {
+      mode = mode === "delete-threw" ? "defined-undefined-after-throw" : "defined-undefined";
+      Object.defineProperty(window, "documentPictureInPicture", {
+        value: undefined,
+        configurable: true,
+      });
+    }
+  }
+  window.__dpipStubMode = mode;
+  window.__dpipTypeof = typeof window.documentPictureInPicture;
+
+  const video = makeVideo({ label: "target", muted: false, duration: 600 });
+  document.getElementById("stage").append(video);
+
+  document.getElementById("open").addEventListener("click", () => {
+    if (typeof window.__pipEntry !== "function") {
+      window.__lastResult = { harnessError: "window.__pipEntry was not injected" };
+      window.__lastSettled = true;
+      return;
+    }
+
+    window.__lastResult = undefined;
+    window.__lastSettled = false;
+
+    // CALLED SYNCHRONOUSLY. Nothing may suspend above this line: the native
+    // fallback this row is about ends in a REAL requestPictureInPicture(), and
+    // native PiP — unlike requestWindow — really does enforce user activation
+    // under automation (gesture.spec.ts's no-gesture control measures it).
+    const result = window.__pipEntry({
+      prefs: {
+        tier: "pro",
+        enhancedWindow: true,
+        windowSize: "medium",
+        rememberSizePerSite: true,
+        inWindowControls: true,
+        subtitles: false,
+        geometry: {},
+      },
+    });
+    Promise.resolve(result).then((value) => {
+      window.__lastResult = value;
+      window.__lastSettled = true;
+    });
+  });
+
+  ready();
+</script>

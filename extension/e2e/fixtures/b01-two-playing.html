@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>B01 — two playing, size decides</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // Everything else equal (both playing, both muted, both live), the only terms
+  // left in the formula are area and viewport intersection. The SMALLER one is
+  // first in DOM order and fully on-screen, so a detector that returns "the
+  // first video" or "the most visible video" loses here on purpose.
+  document.body.append(makeVideo({ label: "smaller", width: 320, height: 180 }));
+  document.body.append(makeVideo({ label: "larger", width: 1280, height: 720 }));
+  ready();
+</script>

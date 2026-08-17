@@ -1,0 +1,10 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A06 — video inside an open &lt;dialog&gt;</title>
+<body>
+<dialog open id="modal"></dialog>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  document.getElementById("modal").append(makeVideo({ label: "in-dialog", muted: false }));
+  ready();
+</script>

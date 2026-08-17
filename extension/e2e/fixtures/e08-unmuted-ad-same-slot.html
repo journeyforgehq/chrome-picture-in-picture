@@ -1,0 +1,42 @@
+<!doctype html><meta charset="utf-8"><title>E08 — unmuted ad in the SAME slot</title>
+<style>
+  /* THE SAME SLOT, MEANT LITERALLY. E02 stacks the ad BELOW the stream, so the
+     ad falls out of the viewport and loses 491 points of intersection it would
+     never lose on a real page — E02 says so about itself. Here both elements
+     occupy the identical rect inside the player slot, which is what a real
+     pre-roll does: it replaces the stream in place, same size, same position.
+     Overlapping them guarantees equal rects at any viewport size, so the
+     intersection and area terms cancel exactly and the ONLY thing left to
+     separate the two videos is the formula's own advert signal. */
+  #slot { position: relative; width: 1280px; height: 720px; }
+  #slot video { position: absolute; top: 0; left: 0; }
+</style><body>
+<div data-a-target="player"><div data-a-target="video-player">
+  <div data-a-target="video-player-layout"><div id="slot"></div></div>
+</div></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // R-14, THE ESCALATION E02 RECORDED AND COULD NOT TEST. The advert penalty
+  // reads `if (duration < 65 && el.muted) score -= 400`, so it is gated on
+  // MUTED. A pre-roll playing at player volume is not muted — it collects no
+  // penalty at all AND keeps the +200 unmuted bonus for itself.
+  //
+  // Both videos here are unmuted, both playing, both the same size in the same
+  // slot. Every per-video term therefore produces the same number for both, the
+  // scores are EQUAL, and the winner falls through the area tie-break (equal
+  // too) to DOM insertion order. That is not a decision the formula is making.
+  //
+  // The ad is inserted as the slot's FIRST child, which is where an ad SDK puts
+  // the player it renders over the stream — and which hands today's DOM-order
+  // tie-break to the advert. (E02 gets the opposite draw purely by luck: its ad
+  // is appended last, so DOM order happens to save it. Luck is the finding.)
+  const slot = document.getElementById("slot");
+  // The stream is the element that persists: live, so duration === Infinity,
+  // straight from captureStream rather than an override.
+  slot.append(makeVideo({ label: "stream", width: 1280, height: 720, muted: false }));
+  setTimeout(() => {
+    const ad = makeVideo({ label: "ad-roll", width: 1280, height: 720, muted: false, duration: 15 });
+    slot.insertBefore(ad, slot.firstChild);
+  }, 100);
+  setTimeout(ready, 400);
+</script>

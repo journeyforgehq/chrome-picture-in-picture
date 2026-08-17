@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>B10 — playing outranks unmuted</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // Same size, so the only difference is which of the two "is the user watching
+  // this" signals fires. Documents the ORDER OF THE WEIGHTS: playing (+1000)
+  // outranks unmuted (+200) by five to one. Sound is evidence of intent; motion
+  // is proof of it.
+  document.body.append(makeVideo({ label: "unmuted-paused", muted: false, playing: false }));
+  document.body.append(makeVideo({ label: "muted-playing", muted: true }));
+  ready();
+</script>

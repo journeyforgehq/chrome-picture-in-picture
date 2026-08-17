@@ -1,0 +1,114 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>g02 — requestWindow() rejects: the native window opens in the same click</title>
+<body>
+<!--
+  GROUP G, ROW G02. "requestWindow() rejects => toast, then native window opens
+  IN THE SAME CLICK."
+
+  g01-no-dpip.html covers the browser that never had the API. This one covers
+  the browser that HAS it and says no — the window manager refused, the display
+  went away, the user is in a mode Chrome will not float a document over. The
+  prefs below are the same paying, opted-in customer, and `supported` is true,
+  so pipEntry takes the document branch for real and then has to recover from a
+  rejected promise.
+
+  WHY "IN THE SAME CLICK" IS THE WHOLE ROW. The recovery happens inside the
+  rejection handler of requestWindow's promise — a microtask, but a SUSPENSION
+  nonetheless — and the native call it then makes is a real
+  requestPictureInPicture(), which (unlike requestWindow, see the spec header)
+  genuinely enforces user activation under automation. So this fixture is the
+  only place the "the page's activation is TIME-based, ~5s, and survives a
+  suspension" claim from S-11 is exercised end to end by the shipped code: if
+  it were false, the fallback would come back NotAllowedError instead of a
+  floating window.
+
+  THE STUB REPORTS ITSELF. window.__dpipStubMode records which route worked and
+  the stub function carries __isStub, because a fixture whose stub silently
+  failed would produce a GREEN "the enhanced window opened" result and quietly
+  stop testing this row. Shadowing the real object's method is preferred over
+  replacing the whole `documentPictureInPicture` object so that everything else
+  about the environment stays real; the replacement is only a fallback for an
+  engine that will not let the method be shadowed.
+
+  As in every other fixture here, __pipEntry is NOT defined on this page — the
+  spec injects the shipped function through the same
+  Function.prototype.toString() trip Chrome makes.
+-->
+<button id="open">Open the enhanced window</button>
+<div id="stage"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+
+  // A DOMException, not a plain Error: this is the shape Chrome rejects with,
+  // and entry.ts's failure paths read `.name` off whatever they are handed.
+  const stub = function () {
+    return Promise.reject(new DOMException("stubbed requestWindow rejection", "NotAllowedError"));
+  };
+  stub.__isStub = true;
+
+  let mode = "shadowed";
+  const dpip = window.documentPictureInPicture;
+  if (!dpip) {
+    // This browser has no Document PiP at all. Standing in a whole object keeps
+    // the row testable, and the spec logs the mode so a run that took this
+    // route is not mistaken for one that patched the real API.
+    mode = "synthesised";
+    Object.defineProperty(window, "documentPictureInPicture", {
+      value: { requestWindow: stub },
+      configurable: true,
+    });
+  } else {
+    try {
+      Object.defineProperty(dpip, "requestWindow", {
+        value: stub,
+        configurable: true,
+        writable: true,
+      });
+    } catch (e) {
+      mode = "shadow-threw";
+    }
+    if (window.documentPictureInPicture.requestWindow !== stub) {
+      mode = "replaced";
+      Object.defineProperty(window, "documentPictureInPicture", {
+        value: { requestWindow: stub },
+        configurable: true,
+      });
+    }
+  }
+  window.__dpipStubMode = mode;
+
+  const video = makeVideo({ label: "target", muted: false, duration: 600 });
+  document.getElementById("stage").append(video);
+
+  document.getElementById("open").addEventListener("click", () => {
+    if (typeof window.__pipEntry !== "function") {
+      window.__lastResult = { harnessError: "window.__pipEntry was not injected" };
+      window.__lastSettled = true;
+      return;
+    }
+
+    window.__lastResult = undefined;
+    window.__lastSettled = false;
+
+    // CALLED SYNCHRONOUSLY — see the note above about what the fallback needs
+    // from the activation this click carries.
+    const result = window.__pipEntry({
+      prefs: {
+        tier: "pro",
+        enhancedWindow: true,
+        windowSize: "medium",
+        rememberSizePerSite: true,
+        inWindowControls: true,
+        subtitles: false,
+        geometry: {},
+      },
+    });
+    Promise.resolve(result).then((value) => {
+      window.__lastResult = value;
+      window.__lastSettled = true;
+    });
+  });
+
+  ready();
+</script>

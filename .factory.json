@@ -50,6 +50,7 @@
     "extension/src/ui-kit/UpgradePaywall.tsx": "f0886ee8c405bcc1bce9f0b195181ba8e4fa05c599dd5775b10008ed579acb85",
     "extension/src/ui-kit/index.ts": "078b5a4d43da52cbc25c69317e56272896083b680a76e1034c38607b38e9b1be",
     "extension/src/ui-kit/theme.ts": "8c2873ff9591c1f9dd6b53814a0d680b2931fadf6d0306d5faf9d8b386e4effe",
+    "extension/webpack/separation-guard.cjs": "100541ce671e25ffd95137dcf6e3ac0542caee827a23ca1817ac9397b8966347",
     "welcome-page/src/ThemeProvider.tsx": "2a304511df0e318e6ca796ba5d766a52f25faf7ea0ca1feeb1f3a531d93f6b3b",
     "welcome-page/src/content-types.ts": "656e88d862d0556b98df9af67b5de04cdd21c6dcd89438f621b7ff9a6e34e7b9",
     "welcome-page/src/sections/Hero.tsx": "7f3cff5660dab19bdd3e3b5fa7692fae94c75421058a27a430a85b451c110ccf",

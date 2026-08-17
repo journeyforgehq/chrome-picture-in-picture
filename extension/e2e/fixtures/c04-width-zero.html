@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>C04 — collapsed to zero width</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // Zero width, full height. Caught by the 100px MINIMUM (rect.width < 100),
+  // not by any of the computed-style checks — this is the geometry net, and it
+  // fires before the style block is ever reached.
+  const v = makeVideo({ label: "hidden", muted: false, duration: 600 });
+  v.style.width = "0px";
+  document.body.append(v);
+  ready();
+</script>

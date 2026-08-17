@@ -1,15 +1,8 @@
 import { describe, it, expect } from "vitest";
-import type { PaywallPlan } from "../src/ui-kit";
 import { PLANS } from "../src/billing/plans";
-
-// Numeric price from a display string like "$3.99" or "$29".
-const num = (p: PaywallPlan) => parseFloat(String(p.price).replace(/[^0-9.]/g, ""));
 
 describe("PLANS (single source)", () => {
   it("has at least one plan, each with a label and a price", () => {
-    // Intentionally NOT asserting a fixed set of ids — a child may ship a single
-    // lifetime plan, a two-tier ladder, or the full three. The invariants below
-    // are what actually matter, and they hold for any subset.
     expect(PLANS.length).toBeGreaterThan(0);
     for (const p of PLANS) {
       expect(p.label).toBeTruthy();
@@ -17,28 +10,33 @@ describe("PLANS (single source)", () => {
     }
   });
 
-  it("has a coherent, non-dominated price ladder", () => {
-    const byId = Object.fromEntries(PLANS.map((p) => [p.id, p])) as Record<string, PaywallPlan | undefined>;
-    const { monthly, annual, lifetime } = byId;
+  /* ==========================================================================
+   * REPLACES the template's non-domination ladder rule.
+   *
+   * That rule guarded three clauses — lifetime > annual, annual < monthly × 12,
+   * and "a highlighted annual must not be dominated" — and every one of them was
+   * written as `if (annual && lifetime)` / `if (annual && monthly)` /
+   * `highlighted?.id === "annual"`. On a single-plan array all three are
+   * vacuously true, so the rule would have passed on an EMPTY ladder and
+   * protected nothing here.
+   *
+   * This child ships lifetime-only at $9.99 (inventory row 61, signed off
+   * 2026-08-07). What is worth pinning is that shape itself: a second plan
+   * appearing, or the price drifting, is a pricing decision and must not slip in
+   * silently. If a ladder is ever restored, restore the non-domination rule with
+   * it — do not just relax this test.
+   * ========================================================================*/
+  it("is lifetime-only at $9.99", () => {
+    expect(PLANS).toHaveLength(1);
+    expect(PLANS[0].id).toBe("lifetime");
+    expect(PLANS[0].price).toBe("$9.99");
+    // Leading space is deliberate — UpgradePaywall emits `{price}{unit}` with no
+    // separator. Correct for "/yr"; without it a word-unit renders "$9.99once".
+    // The rendered proof is in plans-render.test.tsx; this pins the data.
+    expect(PLANS[0].unit).toBe(" once");
+  });
 
-    // A one-time lifetime plan must cost MORE than a year of the annual plan.
-    // If lifetime <= annual/yr, nobody rational renews annually — the annual
-    // plan is strictly dominated. This is exactly the trap a child falls into
-    // by lowering `lifetime` below `annual` without re-pricing annual
-    // (e.g. Annual $29/yr next to Lifetime $29 once).
-    if (annual && lifetime) {
-      expect(num(lifetime)).toBeGreaterThan(num(annual));
-    }
-    // A year of annual must cost LESS than twelve months of monthly, or the
-    // annual plan offers no reason to exist.
-    if (annual && monthly) {
-      expect(num(annual)).toBeLessThan(num(monthly) * 12);
-    }
-    // The highlighted ("POPULAR") plan must never be a dominated option — the
-    // UI is actively steering users to it.
-    const highlighted = PLANS.find((p) => p.highlight);
-    if (highlighted?.id === "annual" && lifetime) {
-      expect(num(lifetime)).toBeGreaterThan(num(annual));
-    }
+  it("highlights nothing — the POPULAR ribbon is meaningless at one plan", () => {
+    expect(PLANS.find((p) => p.highlight)).toBeUndefined();
   });
 });

@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>B02 — small playing beats large paused</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // +1000 for playing is worth more than every size and visibility term put
+  // together (500 + 300 = 800 at their maximum). A thumbnail that is actually
+  // running beats a cinema-sized still, which is what a user watching a small
+  // player on a page full of paused ones expects.
+  document.body.append(makeVideo({ label: "small-playing", width: 200, height: 120 }));
+  document.body.append(makeVideo({ label: "big-paused", width: 1600, height: 900, playing: false }));
+  ready();
+</script>

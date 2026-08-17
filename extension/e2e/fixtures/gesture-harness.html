@@ -1,0 +1,67 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>Gesture harness — real requestPictureInPicture() under a real click</title>
+<body>
+<!--
+  THE ONLY FIXTURE THAT MAKES A REAL PiP CALL.
+
+  Every other fixture in this directory runs pipEntry({ dryRun: true }) and
+  never touches requestPictureInPicture(), because that API needs transient
+  user activation and page.evaluate() does not carry any.
+
+  page.click("#go") DOES carry it. So this page owns one button, and the
+  button's handler calls pipEntry for real. The handler is deliberately
+  SYNCHRONOUS end to end: an await anywhere above the call would spend the
+  activation before PiP ever saw it (rule 2 in src/pip/entry.ts's header).
+
+  window.__pipEntry is NOT defined here. The spec injects it with
+  addInitScript(`window.__pipEntry = ${pipEntry.toString()}`), which is the
+  same Function.prototype.toString() trip chrome.scripting.executeScript makes
+  in production — so this page exercises the shipped function, never a copy of
+  it that could drift.
+-->
+<button id="go">Toggle picture-in-picture</button>
+<div id="stage"></div>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+
+  const video = makeVideo({ label: "target", muted: false, duration: 600 });
+  document.getElementById("stage").append(video);
+
+  // Diagnostics, not an assertion target. The floating window's size is chosen
+  // by Chrome from the screen it lands on — a spike measured 448x252, this
+  // harness measures whatever the current machine produces — so it is recorded
+  // and reported, never pinned. It is the only place the PictureInPictureWindow
+  // itself is reachable: the element gives no handle on it, the promise
+  // resolution is swallowed inside pipEntry, and this event carries it.
+  video.addEventListener("enterpictureinpicture", (e) => {
+    window.__pipWindowSize = { width: e.pictureInPictureWindow.width, height: e.pictureInPictureWindow.height };
+  });
+
+  document.getElementById("go").addEventListener("click", () => {
+    // Recorded even on the failure paths: a spec that read an undefined
+    // __lastResult could not tell "the handler never ran" from "the handler
+    // ran and pipEntry returned nothing".
+    if (typeof window.__pipEntry !== "function") {
+      window.__lastResult = { harnessError: "window.__pipEntry was not injected" };
+      window.__lastSettled = true;
+      return;
+    }
+
+    window.__lastResult = undefined;
+    window.__lastSettled = false;
+
+    // CALLED SYNCHRONOUSLY, RESULT OBSERVED AFTERWARDS. The activation is spent
+    // by this call, so nothing below it can cost anything. pipEntry returns a
+    // plain object on the refusal paths and a PROMISE on the real-PiP path
+    // (it reports requestPictureInPicture()'s asynchronous rejection instead of
+    // swallowing it) — Promise.resolve settles both without caring which.
+    const result = window.__pipEntry({});
+    Promise.resolve(result).then((value) => {
+      window.__lastResult = value;
+      window.__lastSettled = true;
+    });
+  });
+
+  ready();
+</script>

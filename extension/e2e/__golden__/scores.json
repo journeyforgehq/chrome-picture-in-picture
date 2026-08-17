@@ -1,0 +1,337 @@
+{
+  "__README__": [
+    "GOLDEN SCORE MATRIX — every candidate's score on every detection fixture.",
+    "",
+    "A CHANGED GOLDEN IS A DESIGN DECISION, NOT A SNAPSHOT REFRESH.",
+    "Review the diff. Do NOT run UPDATE_GOLDEN=1 to make CI green.",
+    "",
+    "Each entry is the scored candidates for one fixture, in the order entry.ts",
+    "ranked them, so entry[0] is the winner and the gap to entry[1] is the",
+    "margin that decision was made by. An empty array means every video on that",
+    "page was filtered out before scoring — see the fixture's expected reason.",
+    "",
+    "Scores come from the formula in src/pip/entry.ts and are rounded to whole",
+    "points. A diff here means one of three things, in order of likelihood:",
+    "  1. you changed a weight        — read every moved line, not just the red one",
+    "  2. you changed the filters     — check for candidates appearing/disappearing",
+    "  3. a fixture's layout changed  — the intersection term moved; verify why",
+    "",
+    "Regenerate deliberately with: UPDATE_GOLDEN=1 npm run e2e:fixtures"
+  ],
+  "fixtures": {
+    "a01-plain": [
+      {
+        "label": "only",
+        "score": 2000
+      }
+    ],
+    "a02-shadow-1": [
+      {
+        "label": "in-shadow",
+        "score": 2000
+      }
+    ],
+    "a03-shadow-2": [
+      {
+        "label": "deep",
+        "score": 2000
+      }
+    ],
+    "a04-closed-shadow": [],
+    "a05-late-inject": [
+      {
+        "label": "late",
+        "score": 2000
+      }
+    ],
+    "a06-dialog": [
+      {
+        "label": "in-dialog",
+        "score": 2000
+      }
+    ],
+    "a07-content-visibility": [
+      {
+        "label": "offscreen",
+        "score": 1500
+      }
+    ],
+    "a08-feed-25": [
+      {
+        "label": "playing-one",
+        "score": 1500
+      },
+      {
+        "label": "feed-0",
+        "score": 800
+      },
+      {
+        "label": "feed-1",
+        "score": 783
+      },
+      {
+        "label": "feed-2",
+        "score": 300
+      },
+      {
+        "label": "feed-3",
+        "score": 300
+      },
+      {
+        "label": "feed-4",
+        "score": 300
+      },
+      {
+        "label": "feed-5",
+        "score": 300
+      },
+      {
+        "label": "feed-6",
+        "score": 300
+      },
+      {
+        "label": "feed-7",
+        "score": 300
+      },
+      {
+        "label": "feed-8",
+        "score": 300
+      },
+      {
+        "label": "feed-9",
+        "score": 300
+      },
+      {
+        "label": "feed-10",
+        "score": 300
+      },
+      {
+        "label": "feed-11",
+        "score": 300
+      },
+      {
+        "label": "feed-12",
+        "score": 300
+      },
+      {
+        "label": "feed-13",
+        "score": 300
+      },
+      {
+        "label": "feed-14",
+        "score": 300
+      },
+      {
+        "label": "feed-15",
+        "score": 300
+      },
+      {
+        "label": "feed-16",
+        "score": 300
+      },
+      {
+        "label": "feed-17",
+        "score": 300
+      },
+      {
+        "label": "feed-18",
+        "score": 300
+      },
+      {
+        "label": "feed-19",
+        "score": 300
+      },
+      {
+        "label": "feed-20",
+        "score": 300
+      },
+      {
+        "label": "feed-21",
+        "score": 300
+      },
+      {
+        "label": "feed-22",
+        "score": 300
+      },
+      {
+        "label": "feed-23",
+        "score": 300
+      }
+    ],
+    "a09-reparented": [
+      {
+        "label": "moved",
+        "score": 2000
+      }
+    ],
+    "b01-two-playing": [
+      {
+        "label": "larger",
+        "score": 1664
+      },
+      {
+        "label": "smaller",
+        "score": 1586
+      }
+    ],
+    "b02-small-playing-vs-large-paused": [
+      {
+        "label": "small-playing",
+        "score": 1536
+      },
+      {
+        "label": "big-paused",
+        "score": 560
+      }
+    ],
+    "b03-ad-vs-content": [
+      {
+        "label": "content",
+        "score": 1500
+      },
+      {
+        "label": "ad",
+        "score": 891
+      }
+    ],
+    "b04-playing-offscreen-vs-paused-onscreen": [
+      {
+        "label": "playing-offscreen",
+        "score": 1500
+      },
+      {
+        "label": "paused-onscreen",
+        "score": 1000
+      }
+    ],
+    "b05-identical-tie": [
+      {
+        "label": "first",
+        "score": 1800
+      },
+      {
+        "label": "second",
+        "score": 1800
+      }
+    ],
+    "b06-live-infinity": [
+      {
+        "label": "live",
+        "score": 1800
+      }
+    ],
+    "b07-duration-nan": [],
+    "b08-hero-loop-only": [],
+    "b09-hero-plus-content": [
+      {
+        "label": "content",
+        "score": 1650
+      }
+    ],
+    "b10-unmuted-paused-vs-muted-playing": [
+      {
+        "label": "muted-playing",
+        "score": 1783
+      },
+      {
+        "label": "unmuted-paused",
+        "score": 1000
+      }
+    ],
+    "b11-exactly-100": [
+      {
+        "label": "at-boundary",
+        "score": 1515
+      }
+    ],
+    "b12-99px": [],
+    "b13-30s-ad-vs-content": [
+      {
+        "label": "content",
+        "score": 1500
+      },
+      {
+        "label": "ad",
+        "score": 891
+      }
+    ],
+    "c01-display-none": [],
+    "c02-visibility-hidden": [],
+    "c03-opacity-005": [],
+    "c04-width-zero": [],
+    "c05-covered-by-overlay": [
+      {
+        "label": "covered",
+        "score": 2000
+      }
+    ],
+    "c06-sticky-miniplayer": [
+      {
+        "label": "sticky",
+        "score": 2000
+      }
+    ],
+    "c07-ancestor-display-none": [],
+    "d01-disable-property": [],
+    "d02-disable-attr-late": [],
+    "d03-permissions-policy": [],
+    "d04-empty": [],
+    "d05-no-src": [],
+    "e01-youtube-shape": [
+      {
+        "label": "main",
+        "score": 2000
+      }
+    ],
+    "e02-twitch-shape": [
+      {
+        "label": "stream",
+        "score": 1991
+      },
+      {
+        "label": "ad-roll",
+        "score": 400
+      }
+    ],
+    "e03-videojs-shape": [
+      {
+        "label": "tech",
+        "score": 2000
+      }
+    ],
+    "e04-jwplayer-shape": [
+      {
+        "label": "jw",
+        "score": 2000
+      }
+    ],
+    "e05-plyr-webcomponent": [
+      {
+        "label": "custom-el",
+        "score": 2000
+      }
+    ],
+    "e06-vimeo-embed": [
+      {
+        "label": "embedded",
+        "score": 2000
+      }
+    ],
+    "e07-generic-embed-no-allow": [
+      {
+        "label": "embedded",
+        "score": 2000
+      }
+    ],
+    "e08-unmuted-ad-same-slot": [
+      {
+        "label": "stream",
+        "score": 1991
+      },
+      {
+        "label": "ad-roll",
+        "score": 1491
+      }
+    ]
+  }
+}

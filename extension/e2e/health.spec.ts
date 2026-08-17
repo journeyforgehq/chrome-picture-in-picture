@@ -4,9 +4,19 @@ import { resolve } from "node:path";
 import { WORKER_BASE_URL, DIST_DIR } from "./harness/config";
 
 test("global setup built dist and started a healthy worker", async () => {
-  // dist was built by globalSetup
+  // dist was built by globalSetup.
+  //
+  // This spec asserts artifacts EXIST on disk without navigating to them, which
+  // is why it never showed up in a grep for specs that open the popup and why
+  // it was the least obvious thing the deletion broke. options.html replaces
+  // popup.html here; content.js and background.js are named explicitly because
+  // nothing else in the hermetic suite would notice if an entry stopped being
+  // emitted — the extension would simply load and do nothing.
   expect(existsSync(resolve(DIST_DIR, "manifest.json"))).toBe(true);
-  expect(existsSync(resolve(DIST_DIR, "popup.html"))).toBe(true);
+  expect(existsSync(resolve(DIST_DIR, "options.html"))).toBe(true);
+  expect(existsSync(resolve(DIST_DIR, "content.js"))).toBe(true);
+  expect(existsSync(resolve(DIST_DIR, "background.js"))).toBe(true);
+  expect(existsSync(resolve(DIST_DIR, "popup.html"))).toBe(false);
 
   // worker answers /health. NB: /health is a pure liveness probe served BEFORE
   // assertBillingConfig runs (backend index.ts), so a green /health proves the

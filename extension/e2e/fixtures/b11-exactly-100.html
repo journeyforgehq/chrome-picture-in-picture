@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>B11 — exactly 100x100, the inclusive edge</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // The 100px floor is `rect.width < 100 || rect.height < 100`, so 100 is IN.
+  // The unit tests assert this against a stubbed getBoundingClientRect because
+  // happy-dom has no layout engine; here the rect comes from Chromium, so this
+  // is the first check that the boundary survives real CSS box sizing. See
+  // data-fixture-state for the rect this actually measured.
+  document.body.append(makeVideo({ label: "at-boundary", width: 100, height: 100 }));
+  ready();
+</script>

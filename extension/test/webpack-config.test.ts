@@ -40,18 +40,44 @@ describe("webpack.prod.cjs", () => {
     delete process.env.DEV_PRO;
   });
 
-  it("builds popup.js/options.js/popup.html/options.html alongside background/content", async () => {
+  it("builds options.js/options.html alongside background/content", async () => {
     process.env.BACKEND_BASE_URL = "https://api.example.com";
     const stats = await runWebpack(path.resolve(__dirname, "../webpack/webpack.prod.cjs"));
 
     expect(stats.hasErrors()).toBe(false);
     const { assetsByChunkName, assets } = stats.toJson({ assets: true });
-    expect(assetsByChunkName?.popup).toBeDefined();
     expect(assetsByChunkName?.options).toBeDefined();
 
     const assetNames = (assets ?? []).map((a) => a.name);
-    expect(assetNames).toContain("popup.html");
     expect(assetNames).toContain("options.html");
+
+    // The popup is gone (inventory row 15, signed off 2026-08-09). Asserting its
+    // ABSENCE, not just dropping the old assertion: a stray HtmlWebpackPlugin or
+    // a re-added entry should fail here rather than quietly ship a dead page.
+    expect(assetsByChunkName?.popup).toBeUndefined();
+    expect(assetNames).not.toContain("popup.html");
+  }, 30_000);
+
+  /* ==========================================================================
+   * THE GUARD THAT GUARDS THE GUARD.
+   *
+   * webpack/separation-guard.cjs opens with `if (!contentChunk) return;` — it
+   * silently no-ops when no chunk is named `content`. That guard is the only
+   * thing keeping antd and ui-kit out of the bundle injected into arbitrary
+   * pages, and the way to disarm it is not to edit it: it is to rename or drop
+   * the `content` entry in webpack.common.cjs. Deleting the popup was exactly
+   * such an edit to that entry map, which is why this exists.
+   *
+   * test/separation.test.ts proves the guard WORKS. This proves it is ARMED.
+   * ========================================================================*/
+  it("keeps a chunk named `content` in existence, so the separation guard stays armed", async () => {
+    process.env.BACKEND_BASE_URL = "https://api.example.com";
+    const stats = await runWebpack(path.resolve(__dirname, "../webpack/webpack.prod.cjs"));
+
+    const chunkNames = stats
+      .toJson({ chunks: true })
+      .chunks!.flatMap((c) => c.names ?? []);
+    expect(chunkNames).toContain("content");
   }, 30_000);
 });
 

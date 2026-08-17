@@ -1,0 +1,11 @@
+<!doctype html><meta charset="utf-8"><title>C02 — visibility:hidden</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // visibility:hidden still LAYS OUT — the rect is a full 640x360, so the
+  // 100px minimum lets it straight through. The computed-style filter is the
+  // only thing standing between this and a popped-out invisible video.
+  const v = makeVideo({ label: "hidden", muted: false, duration: 600 });
+  v.style.visibility = "hidden";
+  document.body.append(v);
+  ready();
+</script>

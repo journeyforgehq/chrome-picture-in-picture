@@ -25,8 +25,11 @@ require("dotenv").config({ path: r(".env.local") }); // optional local overrides
 module.exports = (devPro) => ({
   entry: {
     background: r("src/background/background.ts"),
+    // The chunk named `content` is load-bearing beyond shipping content.js:
+    // separation-guard.cjs does `if (!contentChunk) return;`, so renaming or
+    // removing this entry DISARMS the antd/ui-kit guard silently. Pinned by
+    // test/webpack-config.test.ts ("keeps a chunk named `content` in existence").
     content: r("src/content/content.ts"),
-    popup: r("src/popup/index.tsx"),
     options: r("src/options/index.tsx"),
   },
   module: {
@@ -60,11 +63,6 @@ module.exports = (devPro) => ({
       "process.env.DEV_PRO": JSON.stringify(devPro ? "true" : "false"),
     }),
     new CopyPlugin({ patterns: [{ from: r("src/static"), to: "." }] }),
-    new HtmlWebpackPlugin({
-      template: r("src/popup/popup.html"),
-      filename: "popup.html",
-      chunks: ["popup"],
-    }),
     new HtmlWebpackPlugin({
       template: r("src/options/options.html"),
       filename: "options.html",

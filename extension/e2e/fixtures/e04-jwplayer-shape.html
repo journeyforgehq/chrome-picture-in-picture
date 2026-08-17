@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>E04 — JW Player-shape</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // STRUCTURAL TRAITS: NESTING DEPTH (three wrappers between body and the
+  // video) and UNSTABLE, GENERATED IDS — the ids below are minted at load time
+  // exactly the way JW Player mints them per instance, so nothing in the suite
+  // can ever come to depend on them. A detector that walks the DOM finds this;
+  // a detector that reaches for a known container id or class does not.
+  const rand = () => Math.random().toString(36).slice(2, 8);
+  let host = document.body;
+  for (let i = 0; i < 3; i++) {
+    const wrap = document.createElement("div");
+    wrap.id = "jw-" + rand();
+    host.append(wrap);
+    host = wrap;
+  }
+  host.append(makeVideo({ label: "jw", width: 640, height: 360, muted: false, duration: 600 }));
+  ready();
+</script>

@@ -10,8 +10,19 @@ const CHILD_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..");
  */
 export function scanForIssues({ files, env }) {
   const issues = [];
+  // Two placeholder spellings, because this child uses both.
+  //
+  // REPLACE_WITH_* is the factory's original convention. The design package uses
+  // __DOUBLE_UNDERSCORE__ tokens (__ORG__, __EXT_ID__, __DOMAIN__), and the
+  // welcome-page rewrite introduced them here — which left this guard blind to
+  // exactly the placeholders it exists to catch, on the one page every new
+  // install sees. Found at the final visual checkpoint, not by the gate.
+  //
+  // A guard that silently stops matching is worse than no guard: the green run
+  // reads as "no placeholders shipped" rather than "not looking".
+  const PLACEHOLDER = /REPLACE_WITH_[A-Z_]+|__[A-Z][A-Z0-9_]*__/g;
   for (const [path, content] of Object.entries(files)) {
-    const m = content.match(/REPLACE_WITH_[A-Z_]+/g);
+    const m = content.match(PLACEHOLDER);
     if (m) for (const token of new Set(m)) issues.push(`${path}: unfilled placeholder ${token}`);
   }
   if (!env.BACKEND_BASE_URL) issues.push("extension/.env: BACKEND_BASE_URL is empty (paywall + /me will target localhost)");

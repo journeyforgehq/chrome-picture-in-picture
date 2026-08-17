@@ -6,7 +6,8 @@
   "scripts": {
     "build": "webpack --config webpack/webpack.prod.cjs",
     "build:dev": "webpack --config webpack/webpack.dev.cjs",
-    "build:zip": "npm run build && node scripts/zip-dist.mjs",
+    "build:zip": "npm run check:assets && npm run build && node scripts/zip-dist.mjs",
+    "check:assets": "node scripts/check-assets.mjs",
     "watch": "webpack --watch --config webpack/webpack.dev.cjs",
     "start": "webpack --watch --config webpack/webpack.dev.cjs",
     "start:staging": "cross-env APP_ENV=staging webpack --watch --config webpack/webpack.dev.cjs",
@@ -23,7 +24,11 @@
     "e2e:staging": "cross-env TARGET=staging playwright test",
     "e2e:install": "playwright install chromium",
     "e2e:typecheck": "tsc --noEmit -p e2e/tsconfig.json",
-    "e2e:live": "playwright test --config playwright.stripe-live.config.ts"
+    "e2e:live": "playwright test --config playwright.stripe-live.config.ts",
+    "e2e:visual": "playwright test --config playwright.visual.config.ts",
+    "e2e:fixtures": "playwright test --config playwright.fixtures.config.ts",
+    "e2e:dpip": "playwright test --config playwright.fixtures.config.ts --grep @dpip",
+    "e2e:granted": "playwright test --config playwright.granted.config.ts"
   },
   "dependencies": {
     "antd": "5.22.5",

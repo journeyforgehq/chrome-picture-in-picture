@@ -1,0 +1,11 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A05 — SPA route change</title>
+<body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // Proves detection runs at CLICK time, not at load time. If this ever fails,
+  // someone has cached the candidate list.
+  setTimeout(() => document.body.append(makeVideo({ label: "late", muted: false })), 500);
+  setTimeout(ready, 700);
+</script>

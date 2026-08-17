@@ -1,0 +1,19 @@
+<!doctype html><meta charset="utf-8"><title>D05 — a &lt;video&gt; element with no source</title>
+<style>#bare{width:640px;height:360px}</style><body>
+<script type="module">
+  import { ready } from "./lib/harness.js";
+  // Built by hand, NOT by makeVideo: the whole point is an element with no
+  // srcObject and no src, which is what a player shell looks like before its
+  // script has attached anything. readyState stays HAVE_NOTHING forever, so the
+  // readyState guard fires first and the answer is "not-ready" — "come back in
+  // a moment" — rather than "none-found". A user who clicks while a player is
+  // still booting must be told the difference.
+  //
+  // It is sized 640x360 by CSS on purpose: if the readyState guard were ever
+  // removed, this element would sail past the 100px minimum and the fixture
+  // would go red instead of passing for the wrong reason.
+  const v = document.createElement("video");
+  v.id = "bare";
+  document.body.append(v);
+  ready();
+</script>

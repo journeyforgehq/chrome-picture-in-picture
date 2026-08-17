@@ -1,0 +1,12 @@
+<!doctype html><meta charset="utf-8"><title>E06 — embed WITH allow=</title><body>
+<!-- The cross-origin child is served from 127.0.0.1:3001. A spike measured that
+     the allow= attribute is NOT actually required — the Permissions Policy default
+     allowlist for picture-in-picture is *, not self — but real embeds carry it,
+     so the fixture carries it too. E07 is this page without it. -->
+<iframe src="http://127.0.0.1:3001/_embed-child.html"
+        allow="autoplay; fullscreen; picture-in-picture"
+        width="640" height="360" style="border:0"></iframe>
+<script type="module">
+  import { ready } from "./lib/harness.js";
+  addEventListener("load", ready);
+</script>

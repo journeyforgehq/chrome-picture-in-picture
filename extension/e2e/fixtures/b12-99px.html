@@ -1,0 +1,10 @@
+<!doctype html><meta charset="utf-8"><title>B12 — 99x99, one pixel below the floor</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // One pixel under B11. Rejected outright, so the answer is null rather than
+  // "the best of what is here" — a 99px player is a thumbnail or a tracking
+  // pixel, and popping one out is worse than doing nothing. The pair B11/B12 is
+  // what makes the boundary a decision instead of a rounding accident.
+  document.body.append(makeVideo({ label: "below-boundary", width: 99, height: 99 }));
+  ready();
+</script>

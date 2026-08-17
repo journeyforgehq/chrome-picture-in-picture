@@ -1,5 +1,22 @@
 /// <reference types="chrome" />
 import { config } from "../billing/config";
+import { decideOutcome } from "./action";
+import { pickWinner, recordScore, pruneFrame, dropTab, type TabScores } from "./arbitrate";
+import {
+  PIP_COORD,
+  PIP_DPIP_CLOSED,
+  PIP_GEOMETRY_CHANGED,
+  PIP_SCORE_REPORT,
+} from "../pip/messages";
+import { rememberSize } from "../pip/geometry";
+import { pipEntry } from "../pip/entry";
+import type { PipEntryResult } from "../pip/entry";
+import { enhanceWindow } from "../pip/enhance";
+import { showToast } from "../pip/toast";
+import { messageFor, severityFor } from "../pip/errors";
+import { getSettings, setSettings, setActivePip, clearActivePip } from "../pip/state";
+import { createPrefsRefresher, PREFS_KEYS, type PipPrefs } from "../pip/prefs";
+import { ensureRegistered, ensureUnregistered } from "./registration";
 
 export interface InstalledDetails {
   reason: string; // chrome.runtime.OnInstalledReason, kept as string for pure-function testability
@@ -59,6 +76,73 @@ export function handleMessage(_message: RelayMessage): RelayResult {
   return { handled: false };
 }
 
+/* ============================================================================
+ * Frame arbitration — the worker half. See src/content/content.ts for the why.
+ * ============================================================================
+ *
+ * There is no API here that can enumerate a tab's frames: chrome.webNavigation
+ * would, and the three-permission manifest forbids it (R-04). So frames
+ * announce themselves, and `sender.frameId` — which arrives free on every
+ * runtime message — is the frame table. The verdict goes back with
+ * chrome.tabs.sendMessage(tabId, msg, { frameId }), which needs a host
+ * permission for that tab but NOT the "tabs" permission.
+ *
+ * None of this runs inside a click. The gesture path (below) reads a value
+ * that was already written; nothing here can put the user activation at risk.
+ * ==========================================================================*/
+
+const FRAME_SCORES_KEY = "frameScores";
+
+async function readFrameScores(): Promise<TabScores> {
+  const stored = await chrome.storage.session.get(FRAME_SCORES_KEY);
+  return (stored[FRAME_SCORES_KEY] as TabScores | undefined) ?? {};
+}
+
+async function writeFrameScores(all: TabScores): Promise<void> {
+  await chrome.storage.session.set({ [FRAME_SCORES_KEY]: all });
+}
+
+// Reports from different frames of the same tab arrive interleaved, and each
+// one is a read-modify-write on ONE storage key. Two in flight at once and the
+// later write clobbers the earlier frame's entry. Serialising them costs
+// nothing (they are already throttled to ~1/s/frame) and removes the race
+// outright. Module state does not survive worker termination, which is fine:
+// the chain just restarts empty, and storage is the real state.
+let arbitrationChain: Promise<void> = Promise.resolve();
+
+function enqueueArbitration(tabId: number, frameId: number, score: number | null): void {
+  arbitrationChain = arbitrationChain
+    .then(() => arbitrateTab(tabId, frameId, score))
+    .catch(() => undefined);
+}
+
+async function arbitrateTab(tabId: number, frameId: number, score: number | null): Promise<void> {
+  let all = recordScore(await readFrameScores(), tabId, frameId, score);
+  const frames = Object.keys(all[tabId] ?? {}).map(Number);
+  const winner = pickWinner(all[tabId] ?? {});
+
+  // A frame that has navigated away rejects here, and that rejection is the
+  // ONLY liveness signal available without webNavigation — so it is also how
+  // stale entries get pruned. Nothing else ever removes them.
+  const dead: number[] = [];
+  await Promise.all(
+    frames.map(async (id) => {
+      try {
+        await chrome.tabs.sendMessage(
+          tabId,
+          { type: PIP_COORD, isWinner: id === winner },
+          { frameId: id }
+        );
+      } catch {
+        dead.push(id);
+      }
+    })
+  );
+
+  for (const id of dead) all = pruneFrame(all, tabId, id);
+  await writeFrameScores(all);
+}
+
 // --- chrome.* wiring (untested shell; exercised by e2e in a later plan) ---
 if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
   // Register the post-uninstall feedback page. setUninstallURL persists, but we
@@ -80,5 +164,291 @@ if (typeof chrome !== "undefined" && chrome.runtime?.onInstalled) {
     const result = handleMessage(message as RelayMessage);
     sendResponse(result);
     return false;
+  });
+
+  // Frame self-registration. Returns false (no async sendResponse): the frame
+  // is telling, not asking, and holding the channel open for a verdict it will
+  // receive on its own listener anyway would just be a second round trip.
+  chrome.runtime.onMessage.addListener((message, sender) => {
+    const msg = message as { type?: string; score?: unknown } | null;
+    if (!msg || msg.type !== PIP_SCORE_REPORT) return false;
+    // sender.tab is absent for messages from the options page; frameId
+    // is 0 for a top frame, so `!frameId` would be wrong here.
+    const tabId = sender.tab?.id;
+    if (tabId === undefined || sender.frameId === undefined) return false;
+    const score = typeof msg.score === "number" ? msg.score : null;
+    enqueueArbitration(tabId, sender.frameId, score);
+    return false;
+  });
+
+  /* THE ENHANCED WINDOW CLOSED. Sent by enhanceWindow's restore (src/pip/
+   * enhance.ts) from the PiP window's pagehide — the only event that covers all
+   * three ways it can go: the user closing it, a navigation taking it, and
+   * Chrome replacing it with another PiP surface. There is no chrome.* event
+   * that tells the worker any of this.
+   *
+   * Without it `activePip` outlives the window, the next toolbar click takes
+   * the EXIT branch against a window that is not there, and the user's click
+   * silently does nothing.
+   *
+   * Returns false: `clearActivePip` is fire-and-forget storage work and the
+   * page is not waiting on an answer — it is in the middle of unloading and may
+   * well be gone before one could arrive. */
+  chrome.runtime.onMessage.addListener((message) => {
+    const msg = message as { type?: string } | null;
+    if (!msg || msg.type !== PIP_DPIP_CLOSED) return false;
+    void clearActivePip();
+    return false;
+  });
+
+  /* THE USER RESIZED THE ENHANCED WINDOW. Sent by the debounced `resize`
+   * listener in src/pip/enhance.ts, once per drag, carrying the CONTENT size
+   * (S-12: `outer` includes the browser's own chrome, and storing that would
+   * re-add it on every open until the window had crept off the screen).
+   *
+   * Returns false: this is fire-and-forget storage work and the page is not
+   * waiting on an answer.
+   *
+   * NOT SERIALISED, unlike `arbitrationChain` above — and the difference is
+   * worth stating, because rememberSize IS a read-modify-write on one storage
+   * key and that is exactly the shape that chain exists to protect. Two of
+   * these cannot overlap: Chrome allows ONE Document PiP window at a time, and
+   * the page-side listener debounces to one message per drag with a 500ms
+   * trailing gap. Add a second sender for this message type and that argument
+   * is gone — chain it then, the way frame scores and the prefs cache are. */
+  chrome.runtime.onMessage.addListener((message) => {
+    const msg = message as { type?: string } | null;
+    if (!msg || msg.type !== PIP_GEOMETRY_CHANGED) return false;
+    const g = message as { origin?: unknown; w?: unknown; h?: unknown };
+    const origin = g.origin;
+    const w = g.w;
+    const h = g.h;
+    // The payload crosses a process boundary from a page-injected function; a
+    // malformed one must not reach storage. rememberSize normalises the numbers
+    // (clamped to 240x135 … 1920x1080, non-finite rejected) — this only has to
+    // establish that they ARE numbers and that there is an origin to key on.
+    if (typeof origin !== "string" || !origin) return false;
+    if (typeof w !== "number" || typeof h !== "number") return false;
+    void (async () => {
+      const settings = await getSettings();
+      /* THE WRITE HALF OF THE rememberSizePerSite INVARIANT — and it is NOT
+       * redundant with the read-side check in src/pip/entry.ts. Read the
+       * capitalised comment there before deleting either one: the read side
+       * exists because entries written while this setting was ON survive being
+       * turned off, so a persistence-only gate would silently mean "stop
+       * recording new sizes" while the user asked for "stop using per-site
+       * sizes" — and the preset dropdown would look dead on every site they had
+       * ever resized. This side exists because the user asking us to stop
+       * remembering must actually stop us writing. */
+      if (settings.rememberSizePerSite) await rememberSize(origin, { w, h });
+    })();
+    return false;
+  });
+
+  // A closed tab's frames can never report again; without this the session map
+  // grows for the life of the browser. (tabs.onRemoved needs no permission —
+  // only the url/title/favIconUrl fields are gated by "tabs".)
+  chrome.tabs.onRemoved?.addListener((tabId) => {
+    arbitrationChain = arbitrationChain
+      .then(async () => {
+        const all = await readFrameScores();
+        const next = dropTab(all, tabId);
+        if (next !== all) await writeFrameScores(next);
+      })
+      .catch(() => undefined);
+  });
+
+  /* ==========================================================================
+   * Embedded-player content-script registration lifecycle. See
+   * src/background/registration.ts for why every call there is guarded.
+   * ========================================================================*/
+
+  // Restart survival is UNVERIFIED. The automated spike could not settle it:
+  // Chrome treated every relaunch of an unpacked extension as a fresh
+  // install, onStartup never fired, and there is no automated path to an
+  // extension Chrome considers "installed". This re-assert is correct
+  // EITHER WAY — if registrations do survive a restart this is a harmless
+  // no-op (ensureRegistered guards on getRegisteredContentScripts first); if
+  // they do not survive, this is what re-establishes them. Leave it until a
+  // human verifies restart behaviour manually.
+  chrome.runtime.onStartup?.addListener(() => {
+    void (async () => {
+      const settings = await getSettings();
+      if (settings.embeddedPlayers) await ensureRegistered();
+    })();
+  });
+
+  // LOAD-BEARING, not belt-and-braces. A spike measured that Chrome does NOT
+  // auto-unregister a dynamically-registered content script when the host
+  // permission it depended on is revoked from chrome://extensions: with
+  // permissions.getAll().origins reduced to [], the script was still
+  // registered and still ran on every page. Without this listener the
+  // content script would keep running after the user believes they revoked
+  // access, which would make the store listing's central claim false.
+  chrome.permissions.onRemoved?.addListener(() => {
+    void (async () => {
+      await ensureUnregistered();
+      await setSettings({ embeddedPlayers: false });
+    })();
+  });
+
+  chrome.permissions.onAdded?.addListener((p) => {
+    if (!p.origins?.includes("<all_urls>")) return;
+    void (async () => {
+      await setSettings({ embeddedPlayers: true });
+      await ensureRegistered();
+    })();
+  });
+
+  /* ==========================================================================
+   * THE PREFS CACHE — read synchronously by the click handler.
+   *
+   * §2.2 of the spec says no module-level variable is trusted across worker
+   * invocations, and that rule is respected here rather than broken: `null`
+   * means UNKNOWN, not "free". An unknown cache makes the injected function do
+   * its own storage read (S-11: 1ms, and the page's activation is time-based
+   * with a ~5s budget, so it is safe there in a way it is NOT safe here).
+   *
+   * Why not just always read page-side? Because the free/native path then
+   * depends on a timing budget instead of on a structural guarantee, on every
+   * click, for the ~99% of users who never buy Pro. This keeps that path
+   * synchronous whenever the worker is warm.
+   *
+   * The refresh is SERIALISED and its failure mode is explicit — see
+   * createPrefsRefresher in src/pip/prefs.ts for the race it closes (the same
+   * one arbitrationChain closes above) and for why a failed read parks the
+   * cache at UNKNOWN rather than at a stale snapshot.
+   * ========================================================================*/
+  let cachedPrefs: PipPrefs | null = null;
+
+  const refreshPrefs = createPrefsRefresher(
+    () => chrome.storage.local.get([...PREFS_KEYS]),
+    (prefs) => {
+      cachedPrefs = prefs;
+    }
+  );
+
+  void refreshPrefs();
+  chrome.storage.onChanged.addListener((changes, area) => {
+    if (area !== "local") return;
+    if (PREFS_KEYS.some((k) => k in changes)) void refreshPrefs();
+  });
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // INVARIANT 1 — executeScript MUST be the first statement here, with NO await
+  // before it. Not "no expensive await" — NO AWAIT.
+  //
+  // S-03 found this the hard way: a run failed because `await
+  // chrome.permissions.getAll()` sat on this line and the injected script
+  // arrived with hasBeenActive false. That left the door open to reading the
+  // rule as "avoid slow calls". S-11 closed it by measuring the cheapest await
+  // there is: `await Promise.resolve()` — zero milliseconds, no IPC — and the
+  // injected frame still arrived with isActive false and threw NotAllowedError.
+  // chrome.storage.session.get() and chrome.storage.local.get() behave the same.
+  // The worker's gesture scope is TURN-based: it ends when this listener's
+  // synchronous run ends, and latency has nothing to do with it.
+  //
+  // The page's activation is a DIFFERENT mechanism — time-based, ~5s — so an
+  // await INSIDE the injected function is fine (S-11 experiment 2: storage.local,
+  // a sendMessage round trip and a 1s timer all still opened PiP; a 6s timer did
+  // not). Anything that needs to be looked up before the PiP call belongs there,
+  // not here.
+  //
+  // DIAGNOSTICS AND PERSISTENCE GO AFTER, INSIDE THE .then().
+  //
+  // One call serves both permission modes: under activeTab this reaches the top
+  // frame only; with <all_urls> granted it reaches every frame. pipEntry
+  // arbitrates in-frame, so the worker never has to ask which mode it is in —
+  // and asking would itself have been a fatal await.
+  // ═══════════════════════════════════════════════════════════════════════════
+  chrome.action.onClicked.addListener((tab) => {
+    if (tab.id === undefined) return;
+    const tabId = tab.id;
+
+    const injection = chrome.scripting.executeScript({
+      target: { tabId, allFrames: true },
+      func: pipEntry,
+      args: [{ prefs: cachedPrefs }],
+    });
+
+    void (async () => {
+      let frames: chrome.scripting.InjectionResult<PipEntryResult>[];
+      try {
+        frames = (await injection) as chrome.scripting.InjectionResult<PipEntryResult>[];
+      } catch {
+        // executeScript rejects on chrome://, the Web Store and the PDF viewer.
+        await chrome.action.setTitle({ tabId, title: messageFor("RESTRICTED_URL") });
+        return;
+      }
+
+      const results = frames.map((f) => f.result).filter(Boolean) as PipEntryResult[];
+      const { toast } = decideOutcome(results);
+
+      const winnerFrame = frames.find((f) => f.result?.acted && f.result?.outcome === "PIP_OK");
+      if (winnerFrame?.result) {
+        await setActivePip({
+          tabId,
+          frameId: winnerFrame.frameId ?? 0,
+          label: winnerFrame.result.winner?.label ?? "",
+        });
+      } else if (results.some((r) => r.outcome === "PIP_EXITED")) {
+        await clearActivePip();
+      }
+
+      // The window is already open; nothing here needs the gesture, which is
+      // why it is a second injection rather than more code inside pipEntry.
+      // pipEntry opened it BLACK AND EMPTY — this is what puts the stylesheet
+      // and the page's <video> into it. INVARIANT 1 governs only the code ABOVE
+      // executeScript in the listener, and test/background/invariant.test.ts
+      // reads exactly that slice; everything here runs in the promise tail,
+      // long after the gesture was spent.
+      //
+      // ITS RETURN VALUE IS DISCARDED, AND THAT IS SAFE — MEASURED, not
+      // assumed. enhanceWindow returns { restore: fn }, which is not
+      // structured-cloneable, and the open question was whether executeScript
+      // would REJECT it — which would fail this step AFTER the window was
+      // already open and styled, leaving a confusing partial state. Probed
+      // against the real API in a loaded extension (Chromium 131.0.6778.33, via
+      // the e2e/granted-dist.ts harness — the only route to a real chrome.*):
+      // the result serializer is JSON-ish and LOSSY, not clone-strict. The
+      // shipped enhanceWindow's own source, injected and returning
+      // { restore: fn }, RESOLVED with `result: {}` — the function property
+      // silently dropped. An HTMLElement (showToast's long-standing precedent)
+      // and even a cyclic object behave the same way; nothing rejects. So the
+      // signature stays as it is for the unit tests, and the worker simply
+      // never reads the handle — the page keeps its own copy on the pagehide
+      // listener, which is where restore is actually needed.
+      if (winnerFrame?.result?.mode === "document") {
+        if (!cachedPrefs) await refreshPrefs();
+        const prefs = cachedPrefs;
+        await chrome.scripting.executeScript({
+          target: { tabId, frameIds: [winnerFrame.frameId ?? 0] },
+          func: enhanceWindow,
+          // No `win` — a Window is not structured-cloneable and cannot cross
+          // this boundary. enhanceWindow reads window.__pipWin, which pipEntry
+          // stashed during the gesture turn.
+          args: [
+            {
+              opts: {
+                inWindowControls: prefs?.inWindowControls !== false,
+                subtitles: prefs?.subtitles === true,
+              },
+            },
+          ],
+        });
+      }
+
+      if (!toast) return;
+      if (!(await getSettings()).toastEnabled) return;
+      if (severityFor(toast) === "tooltip") {
+        await chrome.action.setTitle({ tabId, title: messageFor(toast) });
+        return;
+      }
+      await chrome.scripting.executeScript({
+        target: { tabId, frameIds: [0] },
+        func: showToast,
+        args: [{ text: messageFor(toast), severity: severityFor(toast) as "info" | "blocked" }],
+      });
+    })();
   });
 }

@@ -1,0 +1,9 @@
+<!doctype html><meta charset="utf-8"><title>B03 — advert rejection</title><body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // THE advert-rejection case. The ad is BIGGER; the content is unmuted and long.
+  // If this ever flips, the extension pops out pre-roll ads on real sites.
+  document.body.append(makeVideo({ label: "ad", width: 1280, height: 720, muted: true, duration: 10 }));
+  document.body.append(makeVideo({ label: "content", width: 640, height: 360, muted: false, duration: 600 }));
+  ready();
+</script>

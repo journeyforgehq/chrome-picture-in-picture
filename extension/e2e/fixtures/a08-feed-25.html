@@ -1,0 +1,15 @@
+<!doctype html>
+<meta charset="utf-8">
+<title>A08 — 25-video feed, one playing</title>
+<body>
+<script type="module">
+  import { makeVideo, ready } from "./lib/harness.js";
+  // The playing video sits in the MIDDLE of the feed on purpose: a detector
+  // that returns "the first video" or "the last video" must fail here rather
+  // than pass by luck.
+  for (let i = 0; i < 24; i++) {
+    if (i === 12) document.body.append(makeVideo({ label: "playing-one", muted: false }));
+    document.body.append(makeVideo({ label: "feed-" + i, playing: false }));
+  }
+  ready();
+</script>

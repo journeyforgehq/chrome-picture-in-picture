@@ -1,0 +1,84 @@
+
+> template-extension@0.1.0 test
+> vitest run
+
+
+ RUN  v2.1.9 /Users/oleksiiostapiuk/projects/chrome/picture-in-picture/extension
+
+ ✓ test/pip/entry.test.ts (37 tests) 17ms
+ ✓ test/content.test.ts (18 tests) 18ms
+ ✓ test/entitlement.test.ts (13 tests) 5ms
+ ✓ test/manifest.test.ts (15 tests) 3ms
+ ✓ test/plans-render.test.tsx (6 tests) 754ms
+ ✓ test/background/action.test.ts (13 tests) 5ms
+stderr | test/options/options.test.tsx > Options container — settings wiring > requests <all_urls> SYNCHRONOUSLY from the click — no await may precede it
+Warning: An update to Options inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://reactjs.org/link/wrap-tests-with-act
+    at Options (/Users/oleksiiostapiuk/projects/chrome/picture-in-picture/extension/src/options/options.tsx:21:49)
+
+ ✓ test/options/OptionsView.test.tsx (28 tests) 3292ms
+   ✓ OptionsView — rows > renders exactly the five v1 rows, in order 391ms
+   ✓ OptionsView — restore row > wires the RestoreForm's submit to onRestore(email) 525ms
+ ✓ test/options/options.test.tsx (16 tests) 3781ms
+   ✓ Options container > passes cached plan/status through to OptionsView (PlanBadge shows the plan, not 'No plan') 424ms
+   ✓ Options container > calls entitlement.restore(email) then reflects the RestoreResult in state 675ms
+   ✓ Options container > a successful restore updates the displayed tier 634ms
+   ✓ Options container > opens the lifetime checkout URL, with the device id as client_reference_id 335ms
+ ✓ test/harness/webhook.test.ts (10 tests) 5ms
+ ✓ test/background/registration.test.ts (6 tests) 3ms
+ ✓ test/billing/chrome-storage.test.ts (7 tests) 2ms
+ ✓ test/ui-kit/UpgradePaywall.test.tsx (7 tests) 949ms
+   ✓ UpgradePaywall > calls onCheckout with the plan id when a plan is clicked 339ms
+ ✓ test/pip/state.test.ts (8 tests) 4ms
+ ✓ test/config.test.ts (6 tests) 9ms
+ ✓ test/pip/errors.test.ts (7 tests) 2ms
+ ✓ test/background/arbitrate.test.ts (16 tests) 6ms
+ ✓ test/background.test.ts (10 tests) 4ms
+ ✓ test/device-id.test.ts (5 tests) 2ms
+ ✓ test/icons.test.ts (4 tests) 4ms
+ ✓ test/ui-kit/RestoreForm.test.tsx (8 tests) 1281ms
+   ✓ RestoreForm > calls onRestore with the entered email on submit 662ms
+ ✓ test/pip/toast.test.ts (6 tests) 15ms
+ ✓ test/plans.test.ts (3 tests) 2ms
+ ✓ src/billing/entitlement.test.ts (3 tests) 1ms
+ ✓ test/checkout.test.ts (4 tests) 10ms
+ ✓ test/billing-integration.test.ts (1 test) 3ms
+ ✓ test/ui-kit/LockedFeature.test.tsx (5 tests) 281ms
+ ✓ test/ui-kit/PlanBadge.test.tsx (4 tests) 104ms
+ ✓ test/injected-bundle.test.ts (4 tests) 15042ms
+ ✓ test/background/registration-wiring.test.ts (4 tests) 15039ms
+ ✓ test/ui-kit/theme.test.tsx (5 tests) 30ms
+ ✓ test/zip-artifact.test.ts (7 tests) 15020ms
+ ✓ test/harness/config.test.ts (5 tests) 4ms
+ ✓ test/invariants.test.ts (2 tests) 3ms
+ ✓ test/scripts.test.ts (1 test) 1ms
+ ✓ test/contract-sync.test.ts (1 test) 1ms
+ ✓ test/react-smoke.test.tsx (1 test) 7ms
+ ✓ test/ui-kit/TierBadge.test.tsx (4 tests) 110ms
+ ✓ test/smoke.test.ts (1 test) 2ms
+ ✓ test/ui-kit/PaymentNudge.test.tsx (2 tests) 51ms
+ ✓ test/ui-kit/index.test.ts (2 tests) 2ms
+ ✓ test/webpack-preview-config.test.ts (1 test) 4907ms
+   ✓ webpack.preview.cjs > builds the gallery entry to dist-preview/ without errors 4907ms
+ ✓ test/separation.test.ts (2 tests) 11203ms
+   ✓ content-script/ui-kit separation guard > passes on the real build: content chunk stays antd-free 9775ms
+   ✓ content-script/ui-kit separation guard > FAILS the build when the content entry transitively imports ui-kit 1428ms
+ ✓ test/webpack-config.test.ts (6 tests) 28912ms
+   ✓ webpack.prod.cjs > builds background.js and content.js with no errors 15447ms
+   ✓ webpack.prod.cjs > builds options.js/options.html alongside background/content 6529ms
+   ✓ webpack.prod.cjs > keeps a chunk named `content` in existence, so the separation guard stays armed 4559ms
+   ✓ webpack.dev.cjs > builds successfully with inline source maps 2375ms
+
+ Test Files  43 passed (43)
+      Tests  314 passed (314)
+   Start at  13:49:22
+   Duration  30.97s (transform 566ms, setup 2.77s, collect 25.23s, tests 100.90s, environment 10.35s, prepare 2.72s)
+
