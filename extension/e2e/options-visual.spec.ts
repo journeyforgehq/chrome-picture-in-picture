@@ -242,7 +242,14 @@ for (const vp of [
     await expect(embedded).toHaveCSS("background-color", SWITCH_OFF);
     await expect(embedded).toHaveCSS("outline-width", "0px");
 
-    await expect(card).toHaveScreenshot(`options-free-${vp.name}.png`);
+    /* SOFT, both of them. These are two screenshots in one test, and
+     * toHaveScreenshot is a hard assertion — so when the first failed, the
+     * second was never compared, and a stale dpip-disclosure baseline could
+     * have survived indefinitely with nothing reporting it. Soft assertions
+     * make every screenshot in this test report its own result. Do not make
+     * them hard again to "fail faster"; failing faster here means failing
+     * silently. */
+    await expect.soft(card).toHaveScreenshot(`options-free-${vp.name}.png`);
 
     /* ======================================================================
      * THE Pro DISCLOSURE PANEL — Unlock -> disclosure -> upgrade.
@@ -315,7 +322,7 @@ for (const vp of [
     // Still no money question. The paywall is downstream of this panel.
     await expect(page.locator(".ant-modal-mask")).toBeHidden();
 
-    await expect(panel).toHaveScreenshot(`dpip-disclosure-${vp.name}.png`);
+    await expect.soft(panel).toHaveScreenshot(`dpip-disclosure-${vp.name}.png`);
 
     /* ---- and the CTA really does reach the paywall from here -------------
      * The unit suite proves onOpenPaywall fires. This proves the modal it
