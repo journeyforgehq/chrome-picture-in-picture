@@ -225,23 +225,28 @@ describe("Pro disclosure — the paywall is unreachable before it", () => {
 });
 
 describe("Pro disclosure — placement and focus", () => {
-  it("sits directly after the rows it explains, before the plan row", async () => {
+  it("sits directly after the rows it explains, before the footer", async () => {
     renderFree();
     await userEvent.click(unlock());
     const headings = screen
       .getAllByRole("heading", { level: 3 })
       .map((h) => h.textContent);
+    /* THE LOCKED BLOCK (and this panel, mounted beneath it) IS LAST. Your plan
+     * and Restore purchase moved above LockedFeature so the page has one
+     * enabled -> dimmed transition instead of a dimmed hole in the middle of
+     * the settings. Amendment A-05 — see OptionsView.tsx and
+     * OptionsView.test.tsx's "renders exactly the nine rows, in order". */
     expect(headings).toEqual([
       "Keyboard shortcut",
       "Support embedded players",
       "Show status messages",
+      "Your plan",
+      "Restore purchase",
       "Enhanced window",
       "Window size",
       "In-window controls",
       "Subtitles",
       "Before you upgrade: the enhanced window has a title bar",
-      "Your plan",
-      "Restore purchase",
     ]);
   });
 

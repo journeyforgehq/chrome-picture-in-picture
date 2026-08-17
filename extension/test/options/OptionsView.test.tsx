@@ -49,16 +49,20 @@ describe("OptionsView — rows", () => {
   it("renders exactly the nine rows, in order", () => {
     renderOptions();
     const rows = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    /* THE DIMMED BLOCK IS LAST, DELIBERATELY. Rendered in 03-ux-ui.md §3.5's
+     * order this page read enabled -> dimmed -> enabled, with Upgrade stranded
+     * below the four rows it unlocks. Amendment A-05. If this array ever goes
+     * back to interleaving them, that regression is what it is catching. */
     expect(rows).toEqual([
       "Keyboard shortcut",
       "Support embedded players",
       "Show status messages",
+      "Your plan",
+      "Restore purchase",
       "Enhanced window",
       "Window size",
       "In-window controls",
       "Subtitles",
-      "Your plan",
-      "Restore purchase",
     ]);
   });
 

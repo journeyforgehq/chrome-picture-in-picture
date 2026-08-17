@@ -82,18 +82,21 @@ for (const vp of [
     const card = page.locator('[data-testid="optionsview-free"]');
     await expect(card).toBeVisible();
 
-    // All nine rows actually painted, in order — the four Pro rows included.
-    // They render at every tier: locked on free, live on pro.
+    // All nine rows actually painted, in order — the four Pro rows included,
+    // now LAST. Everything a free user can operate is contiguous at the top;
+    // the locked block (dimmed on free, live on pro) is the terminal group,
+    // so Upgrade — in the account rows above it — sits on the same side of
+    // the boundary as the features it unlocks instead of stranded below them.
     await expect(card.locator(".pip-options__row h3")).toHaveText([
       "Keyboard shortcut",
       "Support embedded players",
       "Show status messages",
+      "Your plan",
+      "Restore purchase",
       "Enhanced window",
       "Window size",
       "In-window controls",
       "Subtitles",
-      "Your plan",
-      "Restore purchase",
     ]);
     await expect(card.getByTestId("tier-badge")).toHaveText("Free");
 

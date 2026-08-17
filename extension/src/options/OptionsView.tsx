@@ -439,6 +439,44 @@ export function OptionsView({
         }
       />
 
+      <Row
+        label="Your plan"
+        wide
+        control={
+          <span data-testid="tier-badge">
+            <TierBadge tier={tier} />
+          </span>
+        }
+      >
+        <Space direction="vertical" size="small" style={{ width: "100%" }}>
+          <PaymentNudge status={status} manageHref={manageBillingHref} />
+          <PlanBadge plan={plan} status={status} />
+          {/* Opens the DISCLOSURE, not the paywall. This button is the second
+            * route to checkout and it sells exactly the same thing the locked
+            * rows do, so it owes the buyer the same trade-off first. Its label
+            * and its free-only visibility are unchanged — several e2e specs
+            * use "Upgrade" as the tier indicator. */}
+          {tier === "free" ? (
+            <Button type="primary" onClick={() => setDisclosureShown(true)}>
+              Upgrade
+            </Button>
+          ) : null}
+        </Space>
+      </Row>
+
+      <Row
+        label="Restore purchase"
+        help="Bought Pro already? Enter the email you used at checkout to restore it on this device."
+        wide
+      >
+        <RestoreForm onRestore={onRestore} result={restoreResult} loading={restoring} />
+      </Row>
+
+      {/* THE LOCKED BLOCK IS LAST. Everything a user can operate comes first,
+        * so the page has ONE enabled->dimmed transition instead of a dimmed
+        * hole punched through the middle of the settings, and Upgrade (in the
+        * account rows above) sits on the same side of the boundary as the
+        * features it unlocks. Inverts 03-ux-ui.md §3.5; amendment A-05. */}
       <LockedFeature locked={locked} onUnlock={() => setDisclosureShown(true)}>
         <Row
           label="Enhanced window"
@@ -542,39 +580,6 @@ export function OptionsView({
           onDismiss={() => setDisclosureShown(false)}
         />
       ) : null}
-
-      <Row
-        label="Your plan"
-        wide
-        control={
-          <span data-testid="tier-badge">
-            <TierBadge tier={tier} />
-          </span>
-        }
-      >
-        <Space direction="vertical" size="small" style={{ width: "100%" }}>
-          <PaymentNudge status={status} manageHref={manageBillingHref} />
-          <PlanBadge plan={plan} status={status} />
-          {/* Opens the DISCLOSURE, not the paywall. This button is the second
-            * route to checkout and it sells exactly the same thing the locked
-            * rows do, so it owes the buyer the same trade-off first. Its label
-            * and its free-only visibility are unchanged — several e2e specs
-            * use "Upgrade" as the tier indicator. */}
-          {tier === "free" ? (
-            <Button type="primary" onClick={() => setDisclosureShown(true)}>
-              Upgrade
-            </Button>
-          ) : null}
-        </Space>
-      </Row>
-
-      <Row
-        label="Restore purchase"
-        help="Bought Pro already? Enter the email you used at checkout to restore it on this device."
-        wide
-      >
-        <RestoreForm onRestore={onRestore} result={restoreResult} loading={restoring} />
-      </Row>
 
       <footer style={{ marginTop: 28, paddingTop: 16, borderTop: "1px solid rgba(5, 5, 5, 0.06)" }}>
         <Paragraph type="secondary" data-testid="privacy-note" style={{ fontSize: 12, margin: 0 }}>

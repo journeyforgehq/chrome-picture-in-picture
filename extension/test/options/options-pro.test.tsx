@@ -40,19 +40,24 @@ describe("Pro rows", () => {
     }
   });
 
-  it("puts them between the status-message row and the plan row", () => {
+  it("puts them last, after the plan and restore rows", () => {
     render(<OptionsView {...base} tier="pro" />);
     const rows = screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent);
+    /* THE LOCKED BLOCK IS LAST. Your plan and Restore purchase moved above
+     * LockedFeature so the page has one enabled -> dimmed transition instead
+     * of a dimmed hole in the middle of the settings. Amendment A-05 — see
+     * OptionsView.tsx and OptionsView.test.tsx's "renders exactly the nine
+     * rows, in order". */
     expect(rows).toEqual([
       "Keyboard shortcut",
       "Support embedded players",
       "Show status messages",
+      "Your plan",
+      "Restore purchase",
       "Enhanced window",
       "Window size",
       "In-window controls",
       "Subtitles",
-      "Your plan",
-      "Restore purchase",
     ]);
   });
 
