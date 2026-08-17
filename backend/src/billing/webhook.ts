@@ -65,7 +65,13 @@ export function actionFromEvent(event: any): Action {
     const end = Number(obj?.lines?.data?.[0]?.period?.end) || 0;
     return { type: "invoice_paid", customerId: custId(obj.customer), periodEnd: end };
   }
-  if (event?.type === "charge.refunded" || event?.type === "charge.dispute.created") {
+  // Full refunds and chargebacks revoke. A PARTIAL refund (refunded !== true) is a
+  // no-op: revoking on a goodwill partial refund destroys a paying customer's
+  // access and generates the dispute the refund was meant to prevent.
+  if (
+    (event?.type === "charge.refunded" && obj.refunded === true) ||
+    event?.type === "charge.dispute.created"
+  ) {
     return { type: "revoke", subId: null, customerId: custId(obj.customer) };
   }
   return { type: "ignore" };

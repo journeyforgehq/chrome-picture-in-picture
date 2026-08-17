@@ -25,7 +25,7 @@ describe("handleWebhook refund cascade", () => {
     await env.PAID.put("paid:dev-r", JSON.stringify(flag("lifetime", "cus_r")));
     await env.PAID.put("cust:cus_r", JSON.stringify(["dev-r"]));
 
-    const req = await signed({ id: "evt_refund", type: "charge.refunded", data: { object: { customer: "cus_r" } } });
+    const req = await signed({ id: "evt_refund", type: "charge.refunded", data: { object: { customer: "cus_r", refunded: true } } });
     const r = await handleWebhook(req, env as Env, NOW);
     expect(r.status).toBe(200);
 
@@ -41,5 +41,27 @@ describe("handleWebhook refund cascade", () => {
     expect(r.status).toBe(200);
 
     expect((await env.PAID.get<PaidFlag>("paid:dev-r2", "json"))?.status).toBe("canceled");
+  });
+
+  it("leaves entitlement ACTIVE on a partial refund (refunded !== true)", async () => {
+    await env.PAID.put("paid:dev-p", JSON.stringify(flag("lifetime", "cus_p")));
+    await env.PAID.put("cust:cus_p", JSON.stringify(["dev-p"]));
+
+    const req = await signed({ id: "evt_partial", type: "charge.refunded", data: { object: { customer: "cus_p", refunded: false } } });
+    const r = await handleWebhook(req, env as Env, NOW);
+    expect(r.status).toBe(200);
+
+    expect((await env.PAID.get<PaidFlag>("paid:dev-p", "json"))?.status).toBe("active");
+  });
+
+  it("leaves entitlement ACTIVE when `refunded` is ABSENT (untyped payload)", async () => {
+    await env.PAID.put("paid:dev-a", JSON.stringify(flag("lifetime", "cus_a")));
+    await env.PAID.put("cust:cus_a", JSON.stringify(["dev-a"]));
+
+    const req = await signed({ id: "evt_absent", type: "charge.refunded", data: { object: { customer: "cus_a" } } });
+    const r = await handleWebhook(req, env as Env, NOW);
+    expect(r.status).toBe(200);
+
+    expect((await env.PAID.get<PaidFlag>("paid:dev-a", "json"))?.status).toBe("active");
   });
 });

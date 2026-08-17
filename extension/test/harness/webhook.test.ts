@@ -69,6 +69,7 @@ describe("event builders", () => {
     const ev = chargeRefunded({ customerId: "cus_1" });
     expect(ev.type).toBe("charge.refunded");
     expect(ev.data.object.customer).toBe("cus_1");
+    expect(ev.data.object.refunded).toBe(true);
   });
 
   it("accepts an explicit eventId override so the same id can be re-sent", () => {
