@@ -110,9 +110,19 @@ export async function applyAction(env: Env, action: Action, nowSec: number): Pro
     // Consent banked by POST /checkout when the session was minted. Absent for grants
     // that came from a static Payment Link (pre-P5, or a rollback), which must still
     // grant cleanly — hence the conditional spread below.
-    const consent = action.sessionId
-      ? await env.PAID.get<ConsentRecord>(consentKey(action.sessionId), "json")
-      : null;
+    // Consent is dispute EVIDENCE, never a precondition for granting. KV's "json"
+    // mode THROWS on a malformed value, and an unguarded throw here escapes
+    // handleWebhook — the customer's money is taken and no PaidFlag is written,
+    // and Stripe's retries fail identically forever. Losing the evidence is bad;
+    // losing the entitlement someone paid for is unacceptable.
+    let consent: ConsentRecord | null = null;
+    if (action.sessionId) {
+      try {
+        consent = await env.PAID.get<ConsentRecord>(consentKey(action.sessionId), "json");
+      } catch {
+        logError("webhook", { event: "consent_unreadable", session: action.sessionId });
+      }
+    }
     const flag: PaidFlag = {
       tier: "pro",
       status: "active",
