@@ -98,12 +98,15 @@ export function invoicePaid(opts: { customerId: string; periodEnd: number; event
   };
 }
 
-/** A refunded charge — the worker revokes every device on the customer's cust: list. */
-export function chargeRefunded(opts: { customerId: string; eventId?: string }): StripeEvent {
+/** A refunded charge — the worker revokes every device on the customer's cust: list.
+ *  Defaults to a FULL refund (`refunded: true`), which is what real full-refund
+ *  payloads carry and what the webhook guard requires. Pass `refunded: false` to
+ *  build a partial refund, which the worker deliberately ignores. */
+export function chargeRefunded(opts: { customerId: string; refunded?: boolean; eventId?: string }): StripeEvent {
   return {
     id: opts.eventId ?? eventId("cr"),
     type: "charge.refunded",
-    data: { object: { customer: opts.customerId } },
+    data: { object: { customer: opts.customerId, refunded: opts.refunded ?? true } },
   };
 }
 

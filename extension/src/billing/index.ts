@@ -18,3 +18,5 @@ export type {
 } from "./entitlement";
 
 export { checkoutUrl } from "./checkout";
+
+export { fetchPortalUrl } from "./portal";

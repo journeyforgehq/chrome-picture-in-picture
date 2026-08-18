@@ -213,7 +213,7 @@ export const content: WelcomeContent = {
     // Paste the Google Form embed URL here (Send → <> → "embedded=true").
     // Empty ships the email fallback until the form exists.
     formEmbedUrl: "",
-    supportEmail: "support@__DOMAIN__",
+    supportEmail: "support@journeyforgehq.com",
     heading: "Sorry to see you go",
     subhead:
       "One question, and it genuinely decides what we fix next: what made you remove it? If a video would not pop out, telling us which kind of page it was on is the most useful thing you can send.",

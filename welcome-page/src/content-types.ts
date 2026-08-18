@@ -45,3 +45,22 @@ export interface WelcomeContent {
     formVersionEntryId?: string;
   };
 }
+
+/** A legal-policy section. Shared by the terms and refund pages so both render
+ *  through one layout. */
+export interface PolicySection {
+  heading: string;
+  paragraphs?: string[];
+  bullets?: string[];
+}
+
+/** Per-app legal copy. Lives in the child-owned slot src/legal-content.ts. */
+export interface LegalContent {
+  /** Human date, e.g. "17 August 2026". Shown to readers and reviewers. */
+  updated: string;
+  supportEmail: string;
+  /** The legal entity that appears on the customer's card statement. */
+  merchantName: string;
+  terms: { summary: string; sections: PolicySection[] };
+  refunds: { summary: string; sections: PolicySection[] };
+}

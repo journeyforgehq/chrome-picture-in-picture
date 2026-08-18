@@ -75,3 +75,10 @@ export function errorFor(status: number): ResolvedError {
   const resolvedStatus = ERROR_CATALOG[status] ? status : 500;
   return { status: resolvedStatus, name: entry.name, message: entry.message };
 }
+
+/** POST /portal response. `url` is a short-lived Stripe-hosted session URL. */
+export interface PortalResponse {
+  ok: boolean;
+  url?: string;
+  reason?: "no_entitlement" | "no_customer" | "stripe_error";
+}

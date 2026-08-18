@@ -12,6 +12,7 @@ import {
 import type { PipSettings } from "../pip/state";
 import type { RestoreResult } from "../billing";
 import type { Tier, Plan, PaidStatus } from "../contract";
+import { TERMS_URL, REFUNDS_URL } from "../legal-links";
 
 const { Title, Text, Paragraph } = Typography;
 
@@ -591,6 +592,18 @@ export function OptionsView({
             Read the source
           </a>
         </Paragraph>
+        {/* Policy links go in the EXISTING footer rather than a second one — a
+            policy nobody can reach doesn't count, and Stripe and CWS reviewers
+            follow these. The "Read the source" link above is untouched. */}
+        <Paragraph style={{ fontSize: 12, margin: "6px 0 0" }} data-testid="legal-links">
+          <a href={TERMS_URL} target="_blank" rel="noreferrer">
+            Terms of Service
+          </a>
+          {" · "}
+          <a href={REFUNDS_URL} target="_blank" rel="noreferrer">
+            Refund Policy
+          </a>
+        </Paragraph>
       </footer>
 
       <UpgradePaywall
@@ -598,6 +611,7 @@ export function OptionsView({
         plans={plans}
         onCheckout={onCheckout}
         onClose={onClosePaywall}
+        subtitle="One-time payment. 14-day refund, no questions asked."
       />
     </div>
   );
