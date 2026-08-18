@@ -15,6 +15,10 @@ export interface Config {
   UNINSTALL_URL: string;
   ACCENT: string;
   DEV_PRO: boolean;
+  /** "session" (default) mints via POST /checkout. "link" falls back to the
+   *  static Payment Link. Lets the money path roll back without a store
+   *  resubmission — flip the env var and rebuild. */
+  CHECKOUT_MODE: "session" | "link";
 }
 
 // In the browser build, webpack's DefinePlugin replaces `process.env.X`
@@ -45,6 +49,9 @@ export const config: Config = {
   // Hard rule: only the literal string "true" enables dev-pro. webpack.prod.cjs
   // pins __DEV_PRO__ to false regardless of shell env (see Task 10).
   DEV_PRO: process.env.DEV_PRO === "true",
+  // Server-minted sessions are the default; only the literal "link" rolls back
+  // to the static Payment Link (so a typo can't silently downgrade the money path).
+  CHECKOUT_MODE: process.env.CHECKOUT_MODE === "link" ? "link" : "session",
 };
 
 export type { Plan };

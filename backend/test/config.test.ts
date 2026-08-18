@@ -8,6 +8,7 @@ function baseEnv(over: Partial<Env> = {}): Env {
     STRIPE_WEBHOOK_SECRET: "whsec_test_123",
     ENVIRONMENT: "production",
     APP_VERSION: "1.2.3",
+    APP_SLUG: "test-app",
     ...over,
   };
 }

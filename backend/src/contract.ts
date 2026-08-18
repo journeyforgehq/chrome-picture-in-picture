@@ -10,6 +10,16 @@ export type Tier = "free" | "pro";
 export type Plan = "monthly" | "annual" | "lifetime";
 export type PaidStatus = "active" | "inactive" | "canceled" | "past_due";
 
+/** What the customer was actually shown when they clicked buy. Dispute evidence. */
+export interface ConsentRecord {
+  at: number;              // unix seconds
+  priceShown: string;      // exactly the string rendered on the plan card, e.g. "$29"
+  plan: Plan;
+  app: string;             // matches metadata.app on the Stripe session
+  termsVersion: string;
+  ip: string;              // CF-Connecting-IP, or "" when unavailable
+}
+
 /** Entitlement record stored at paid:{deviceId}. */
 export interface PaidFlag {
   tier: Exclude<Tier, "free">;
@@ -19,6 +29,9 @@ export interface PaidFlag {
   customerId: string;
   subId: string | null;
   email: string;
+  /** OPTIONAL on purpose: every entitlement granted before server-created Checkout
+   *  Sessions has none, and requiring it would invalidate every existing KV record. */
+  consent?: ConsentRecord;
 }
 
 /** GET /me response. */
@@ -81,4 +94,18 @@ export interface PortalResponse {
   ok: boolean;
   url?: string;
   reason?: "no_entitlement" | "no_customer" | "stripe_error";
+}
+
+/** POST /checkout request + response. Replaces the static Payment Link: the session
+ *  is minted server-side so it can carry metadata.app, a statement descriptor and a
+ *  consent record, and can be rate limited. */
+export interface CheckoutRequest {
+  plan: Plan;
+  priceShown: string;
+  termsVersion: string;
+}
+export interface CheckoutResponse {
+  ok: boolean;
+  url?: string;
+  reason?: "bad_plan" | "not_configured" | "rate_limited" | "stripe_error";
 }
