@@ -43,6 +43,34 @@ export interface UpgradePaywallProps {
   disclosure?: { text: string; termsUrl: string; refundsUrl: string };
 }
 
+/**
+ * The CTA disclosure is the text a chargeback dispute rests on, so it is held to
+ * WCAG AA (4.5:1) rather than inheriting antd's decorative tokens.
+ *
+ * Why these are pinned rather than themed:
+ *  - antd's `type="secondary"` resolves to rgba(0,0,0,0.45) = 3.36:1 — it FAILS.
+ *    rgba(0,0,0,0.65) composites to rgb(89,89,89) = 7.00:1.
+ *  - Links deliberately do NOT use ACCENT. That token is overridden per
+ *    extension, so the readability of legal text would otherwise depend on
+ *    whichever brand colour a child happened to pick — the default #1677ff is
+ *    already only 4.10:1. antd blue-7 (#0958d9) is 6.16:1 and fixed.
+ *  - Underlined so the links are identifiable without relying on colour
+ *    (WCAG 1.4.1), which also helps at this small a size.
+ * Enforced by test/ui-kit/disclosure-contrast.test.tsx, which asserts the
+ * computed ratio rather than the colour string.
+ */
+const DISCLOSURE_TEXT_STYLE: React.CSSProperties = {
+  fontSize: 11,
+  display: "block",
+  marginTop: 8,
+  lineHeight: 1.45,
+  color: "rgba(0, 0, 0, 0.65)",
+};
+const DISCLOSURE_LINK_STYLE: React.CSSProperties = {
+  color: "#0958d9",
+  textDecoration: "underline",
+};
+
 const ACCENT = "var(--ant-color-primary, #1677ff)";
 
 /**
@@ -173,11 +201,15 @@ export function UpgradePaywall({
                   in a footer. Text + links are passed in so this component keeps
                   no billing/config dependency (spec §11A). */}
               {disclosure ? (
-                <Text type="secondary" style={{ fontSize: 11, display: "block", marginTop: 8, lineHeight: 1.45 }}>
+                <Text style={{ ...DISCLOSURE_TEXT_STYLE }}>
                   {disclosure.text}{" "}
-                  <a href={disclosure.termsUrl} target="_blank" rel="noreferrer">Terms</a>
-                  {" · "}
-                  <a href={disclosure.refundsUrl} target="_blank" rel="noreferrer">Refund policy</a>
+                  <a href={disclosure.termsUrl} target="_blank" rel="noreferrer" style={DISCLOSURE_LINK_STYLE}>
+                    Terms
+                  </a>
+                  {" \u00b7 "}
+                  <a href={disclosure.refundsUrl} target="_blank" rel="noreferrer" style={DISCLOSURE_LINK_STYLE}>
+                    Refund policy
+                  </a>
                 </Text>
               ) : null}
 
