@@ -29,7 +29,7 @@ describe("router", () => {
     const { isBillingConfigured } = await import("../src/billing/config");
     expect(isBillingConfigured({
       PAID: {} as any, STRIPE_SECRET_KEY: "sk", STRIPE_WEBHOOK_SECRET: "",
-      ENVIRONMENT: "production", APP_VERSION: "t",
+      ENVIRONMENT: "production", APP_VERSION: "t", APP_SLUG: "test-app",
     })).toBe(false);
   });
 

@@ -18,6 +18,18 @@ export interface Env {
   /** Where Stripe returns the customer after they close the portal. Optional —
    *  Stripe falls back to the account's configured default when unset. */
   PORTAL_RETURN_URL?: string;
+  /** Stripe Price IDs (price_...), NOT Payment Link URLs. Empty => plan unavailable. */
+  STRIPE_PRICE_MONTHLY?: string;
+  STRIPE_PRICE_ANNUAL?: string;
+  STRIPE_PRICE_LIFETIME?: string;
+  /** App slug written to metadata.app on every session — the key that makes
+   *  per-extension dispute/refund reporting possible on a shared Stripe account. */
+  APP_SLUG: string;
+  /** Appended to the account descriptor on card statements (mode=payment ONLY).
+   *  Max 22 chars total with the prefix; letters, numbers and spaces. */
+  STATEMENT_DESCRIPTOR_SUFFIX?: string;
+  CHECKOUT_SUCCESS_URL?: string;
+  CHECKOUT_CANCEL_URL?: string;
 }
 
 /** DEV_FORCE_PRO is honored only in dev, so it can never ship enabled in prod (spec §9). */

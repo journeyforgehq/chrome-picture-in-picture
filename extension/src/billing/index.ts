@@ -17,6 +17,7 @@ export type {
   CreateEntitlementOptions,
 } from "./entitlement";
 
-export { checkoutUrl } from "./checkout";
+export { checkoutUrl, startCheckout, TERMS_VERSION } from "./checkout";
+export type { CheckoutContext } from "./checkout";
 
 export { fetchPortalUrl } from "./portal";

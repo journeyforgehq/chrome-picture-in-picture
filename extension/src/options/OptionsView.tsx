@@ -8,6 +8,7 @@ import {
   PaymentNudge,
   LockedFeature,
   type PaywallPlan,
+  type UpgradePaywallProps,
 } from "../ui-kit";
 import type { PipSettings } from "../pip/state";
 import type { RestoreResult } from "../billing";
@@ -40,6 +41,8 @@ export interface OptionsViewProps {
   onClosePaywall: () => void;
   onCheckout: (planId: Plan) => void;
   plans: PaywallPlan[];
+  /** Passed straight to UpgradePaywall — the CTA-adjacent purchase disclosure. */
+  disclosure?: UpgradePaywallProps["disclosure"];
   /** Public repository link shown in the footer. */
   sourceUrl: string;
   /** True after chrome.permissions.request() came back denied. */
@@ -361,6 +364,7 @@ export function OptionsView({
   onClosePaywall,
   onCheckout,
   plans,
+  disclosure,
   sourceUrl,
   siteAccessDenied = false,
 }: OptionsViewProps) {
@@ -609,6 +613,7 @@ export function OptionsView({
       <UpgradePaywall
         open={paywallOpen}
         plans={plans}
+        disclosure={disclosure}
         onCheckout={onCheckout}
         onClose={onClosePaywall}
         subtitle="One-time payment. 14-day refund, no questions asked."

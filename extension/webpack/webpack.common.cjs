@@ -60,6 +60,9 @@ module.exports = (devPro) => ({
       "process.env.WELCOME_URL": JSON.stringify(process.env.WELCOME_URL || ""),
       "process.env.UNINSTALL_URL": JSON.stringify(process.env.UNINSTALL_URL || ""),
       "process.env.ACCENT": JSON.stringify(process.env.ACCENT || ""),
+      // Rollback switch for the money path: "link" restores the static Payment
+      // Link, anything else (incl. unset) mints a session via POST /checkout.
+      "process.env.CHECKOUT_MODE": JSON.stringify(process.env.CHECKOUT_MODE || ""),
       "process.env.DEV_PRO": JSON.stringify(devPro ? "true" : "false"),
     }),
     new CopyPlugin({ patterns: [{ from: r("src/static"), to: "." }] }),

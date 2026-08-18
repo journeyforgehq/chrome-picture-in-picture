@@ -38,6 +38,9 @@ export interface UpgradePaywallProps {
   title?: string;
   /** Optional sub-heading under the title. */
   subtitle?: string;
+  /** Disclosure rendered directly beneath each CTA. Omit to render nothing.
+   *  Kept as a prop so this component stays presentational — see spec §11A. */
+  disclosure?: { text: string; termsUrl: string; refundsUrl: string };
 }
 
 const ACCENT = "var(--ant-color-primary, #1677ff)";
@@ -46,7 +49,8 @@ const ACCENT = "var(--ant-color-primary, #1677ff)";
  * Plan-card paywall: one card per plan side by side (stacking on mobile), each
  * with name, description, price, CTA, and an optional checkmark feature list.
  * Presentational only — clicking a plan calls onCheckout(planId); the caller
- * opens checkoutUrl(planId, deviceId). No billing/network dependency (spec §11A).
+ * opens await startCheckout(planId, deviceId, ctx). The purchase disclosure comes
+ * in as a prop for the same reason. No billing/network dependency (spec §11A).
  */
 export function UpgradePaywall({
   open,
@@ -55,6 +59,7 @@ export function UpgradePaywall({
   onClose,
   title = "Upgrade to Pro",
   subtitle,
+  disclosure,
 }: UpgradePaywallProps) {
   const span = plans.length >= 3 ? 8 : plans.length === 2 ? 12 : 24;
   // Reserve a row's vertical space ONLY when at least one plan uses it, so the
@@ -162,6 +167,19 @@ export function UpgradePaywall({
               >
                 {plan.ctaLabel ?? `Choose ${plan.label}`}
               </Button>
+
+              {/* FTC negative-option rule: renewal/refund terms and the consent
+                  language belong immediately adjacent to the purchase button, not
+                  in a footer. Text + links are passed in so this component keeps
+                  no billing/config dependency (spec §11A). */}
+              {disclosure ? (
+                <Text type="secondary" style={{ fontSize: 11, display: "block", marginTop: 8, lineHeight: 1.45 }}>
+                  {disclosure.text}{" "}
+                  <a href={disclosure.termsUrl} target="_blank" rel="noreferrer">Terms</a>
+                  {" · "}
+                  <a href={disclosure.refundsUrl} target="_blank" rel="noreferrer">Refund policy</a>
+                </Text>
+              ) : null}
 
               {plan.features && plan.features.length > 0 ? (
                 <ul style={{ listStyle: "none", padding: 0, margin: "16px 0 0", textAlign: "left" }}>

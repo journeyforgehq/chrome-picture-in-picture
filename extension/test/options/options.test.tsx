@@ -49,6 +49,8 @@ vi.mock("../../src/billing/chrome-storage", () => ({
 import { Options } from "../../src/options/options";
 import { DEFAULT_SETTINGS } from "../../src/pip/state";
 import { PLANS } from "../../src/billing/plans";
+import { TERMS_VERSION } from "../../src/billing";
+import { PURCHASE_DISCLOSURE } from "../../src/billing/disclosure";
 
 /** The paywall CTA, derived from PLANS so a pricing change can't silently
  *  disarm the checkout test by renaming the button. */
@@ -158,25 +160,54 @@ describe("Options container", () => {
    * failure that is invisible on the client and only shows up as a support
    * ticket. So this asserts the WHOLE url, not just that a tab opened.
    * ========================================================================*/
-  it("opens the lifetime checkout URL, with the device id as client_reference_id", async () => {
+  const SESSION_URL = "https://checkout.stripe.com/c/pay/cs_test_pip";
+
+  function stubSessionFetch(url: string | null = SESSION_URL) {
+    const mock = vi.fn().mockResolvedValue(
+      url
+        ? { ok: true, json: async () => ({ ok: true, url }) }
+        : { ok: false, status: 429, json: async () => ({ ok: false }) }
+    );
+    vi.stubGlobal("fetch", mock);
+    return mock;
+  }
+
+  // Free tier → Upgrade opens the DISCLOSURE, and the disclosure's own CTA is
+  // what reaches the paywall. Both clicks are load-bearing: if the first one
+  // ever opens the paywall directly again, the second findByRole below is the
+  // one that would still pass, so the panel's presence is asserted between
+  // them rather than inferred.
+  async function reachPaywallCta() {
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
+    fireEvent.click(await screen.findByTestId("dpip-disclosure-continue"));
+    return screen.findByRole("button", { name: planCta });
+  }
+
+  it("mints a Checkout Session and opens its URL, keyed to this device", async () => {
+    const fetchMock = stubSessionFetch();
     render(<Options />);
     await waitFor(() => expect(refreshMock).toHaveBeenCalled());
 
-    // Free tier → Upgrade opens the DISCLOSURE, and the disclosure's own CTA is
-    // what reaches the paywall. Both clicks are load-bearing: if the first one
-    // ever opens the paywall directly again, the second findByRole below is the
-    // one that would still pass, so the panel's presence is asserted between
-    // them rather than inferred.
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    fireEvent.click(await screen.findByTestId("dpip-disclosure-continue"));
-    fireEvent.click(await screen.findByRole("button", { name: planCta }));
+    fireEvent.click(await reachPaywallCta());
 
-    expect(chrome.tabs.create).toHaveBeenCalledTimes(1);
+    await waitFor(() => expect(chrome.tabs.create).toHaveBeenCalledTimes(1));
     const arg = (chrome.tabs.create as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(arg.url).toBe(`${LIFETIME_LINK}?client_reference_id=device-abc-123`);
+    expect(arg.url).toBe(SESSION_URL);
+
+    // The device id now travels in the header (and becomes client_reference_id
+    // server-side) rather than being pasted onto a public Payment Link. The
+    // price banked as consent is read off the SAME card the user saw.
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect((init.headers as Record<string, string>)["X-Device-Id"]).toBe("device-abc-123");
+    expect(JSON.parse(init.body as string)).toMatchObject({
+      plan: PLANS[0].id,
+      priceShown: PLANS[0].price,
+      termsVersion: TERMS_VERSION,
+    });
   });
 
   it("falls back to window.open when chrome.tabs is unavailable", async () => {
+    stubSessionFetch();
     const open = vi.fn();
     vi.stubGlobal("open", open);
     // Same chrome stub minus `tabs` — the shape a non-extension host presents.
@@ -188,14 +219,37 @@ describe("Options container", () => {
     render(<Options />);
     await waitFor(() => expect(refreshMock).toHaveBeenCalled());
 
-    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }));
-    fireEvent.click(await screen.findByTestId("dpip-disclosure-continue"));
-    fireEvent.click(await screen.findByRole("button", { name: planCta }));
+    fireEvent.click(await reachPaywallCta());
 
-    expect(open).toHaveBeenCalledWith(
-      `${LIFETIME_LINK}?client_reference_id=device-abc-123`,
-      "_blank",
-    );
+    await waitFor(() => expect(open).toHaveBeenCalledWith(SESSION_URL, "_blank"));
+  });
+
+  it("surfaces an error and opens NO tab when the session cannot be minted", async () => {
+    stubSessionFetch(null);
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+
+    fireEvent.click(await reachPaywallCta());
+
+    expect(await screen.findByText(/couldn't start checkout/i)).toBeInTheDocument();
+    expect(chrome.tabs.create).not.toHaveBeenCalled();
+  });
+
+  // Threading check: the container owns the disclosure copy/links, so a dropped
+  // prop silently ships a paywall with no negative-option disclosure.
+  it("passes the CTA-adjacent purchase disclosure down to the paywall", async () => {
+    stubSessionFetch();
+    render(<Options />);
+    await waitFor(() => expect(refreshMock).toHaveBeenCalled());
+    await reachPaywallCta();
+
+    const links = [...document.querySelectorAll("a")];
+    expect(links.map((a) => a.textContent)).toContain("Terms");
+    expect(links.map((a) => a.textContent)).toContain("Refund policy");
+    expect(document.body.textContent).toContain(PURCHASE_DISCLOSURE.text);
+    // Real published origin, not an empty href from an unset WELCOME_URL.
+    expect(links.find((a) => a.textContent === "Terms")!.getAttribute("href"))
+      .toBe(PURCHASE_DISCLOSURE.termsUrl);
   });
 });
 

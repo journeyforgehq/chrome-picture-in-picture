@@ -1,8 +1,10 @@
 /// <reference types="chrome" />
+import { message } from "antd";
 import React, { useEffect, useState } from "react";
 import { ThemeProvider } from "../ui-kit";
 import { OptionsView } from "./OptionsView";
-import { getDeviceId, createEntitlement, checkoutUrl, config } from "../billing";
+import { getDeviceId, createEntitlement, startCheckout, TERMS_VERSION, config } from "../billing";
+import { PURCHASE_DISCLOSURE } from "../billing/disclosure";
 import { PLANS } from "../billing/plans";
 import type { RestoreResult } from "../billing";
 import { chromeSyncLocalStores, chromeLocalStore } from "../billing/chrome-storage";
@@ -157,10 +159,22 @@ export function Options() {
     }
   }
 
-  function handleCheckout(planId: Plan) {
-    const url = checkoutUrl(planId, deviceId);
+  async function handleCheckout(planId: Plan) {
+    // Read the price off the SAME entry the card rendered, so the consent record
+    // banked server-side cannot drift from what the user actually saw.
+    const shown = PLANS.find((p) => p.id === planId);
+    const url = await startCheckout(planId, deviceId, {
+      priceShown: String(shown?.price ?? ""),
+      termsVersion: TERMS_VERSION,
+    });
+    // startCheckout returns null instead of throwing — surface it rather than
+    // opening a blank tab.
+    if (!url) {
+      message.error("Couldn't start checkout. Please try again.");
+      return;
+    }
     if (typeof chrome !== "undefined" && chrome.tabs?.create) {
-      chrome.tabs.create({ url });
+      await chrome.tabs.create({ url });
     } else {
       window.open(url, "_blank");
     }
@@ -183,6 +197,7 @@ export function Options() {
         onClosePaywall={() => setPaywallOpen(false)}
         onCheckout={handleCheckout}
         plans={PLANS}
+        disclosure={PURCHASE_DISCLOSURE}
         sourceUrl={SOURCE_URL}
         siteAccessDenied={siteAccessDenied}
       />

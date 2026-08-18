@@ -12,6 +12,8 @@ import type { PaidFlag } from "../contract";
 //   sub:{subId}                    -> deviceId
 //   evt:{stripeEventId}            -> "1" idempotency marker (TTL)
 //   restore:{deviceId}:{yyyy-mm-dd}-> attempt counter (TTL)
+//   checkout:{deviceId}:{yyyy-mm-dd}-> checkout attempt counter (TTL)
+//   consent:{sessionId}            -> pending ConsentRecord JSON (TTL)
 
 export type PaidRecord = PaidFlag;
 export type CustList = string[];
@@ -22,6 +24,12 @@ export const custKey = (customerId: string): string => `cust:${customerId}`;
 export const subKey = (subId: string): string => `sub:${subId}`;
 export const evtKey = (eventId: string): string => `evt:${eventId}`;
 export const restoreKey = (deviceId: string, day: string): string => `restore:${deviceId}:${day}`;
+
+export const checkoutKey = (deviceId: string, day: string): string => `checkout:${deviceId}:${day}`;
+
+/** Pending consent captured at session creation, keyed by Checkout Session id.
+ *  Folded into the PaidFlag on checkout.session.completed, then expires. */
+export const consentKey = (sessionId: string): string => `consent:${sessionId}`;
 
 /** UTC yyyy-mm-dd for the given epoch-ms (defaults to now). */
 export function todayUTC(nowMs: number = Date.now()): string {

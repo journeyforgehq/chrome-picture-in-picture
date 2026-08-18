@@ -3,10 +3,10 @@
 // Edit upstream in the template and run `sync-core` to propagate. Local edits
 // are reported as drift and refused without --force.
 // =============================================================================
-import type { PaidFlag, Plan } from "../contract";
+import type { ConsentRecord, PaidFlag, Plan } from "../contract";
 import { json } from "./http";
 import { logInfo, logWarn, logError } from "./log";
-import { paidKey, emailKey, subKey, evtKey } from "./kv-schema";
+import { paidKey, emailKey, subKey, evtKey, consentKey } from "./kv-schema";
 import { verifyStripeSignature } from "./stripe-sig";
 import { appendDevice, forEachCustomerDevice } from "./kv-ops";
 import type { Env } from "./config";
@@ -15,7 +15,7 @@ const SUBSCRIPTION_PERIOD_SEC = 31 * 86400; // near-future placeholder; refined 
 const EVENT_TTL_SEC = 3 * 86400; // 3 days
 
 export type Action =
-  | { type: "grant"; deviceId: string | null; customerId: string; email: string; plan: Plan; subId: string | null }
+  | { type: "grant"; deviceId: string | null; customerId: string; email: string; plan: Plan; subId: string | null; sessionId: string | null }
   | { type: "revoke"; subId: string | null; customerId: string }
   | { type: "revoke_by_charge"; chargeId: string }
   | { type: "renew"; customerId: string; periodEnd: number }
@@ -63,6 +63,9 @@ export function actionFromEvent(event: any): Action {
       email: ((obj.customer_details && obj.customer_details.email) || obj.customer_email || "").toLowerCase(),
       plan: isSub ? "annual" : "lifetime",
       subId: isSub ? (typeof obj.subscription === "string" ? obj.subscription : (obj.subscription.id ?? null)) : null,
+      // Only the id is carried here. The consent:{sessionId} lookup is a KV read and
+      // belongs in applyAction — this function is pure by contract.
+      sessionId: obj.id || null,
     };
   }
   if (
@@ -104,6 +107,12 @@ export function actionFromEvent(event: any): Action {
 
 export async function applyAction(env: Env, action: Action, nowSec: number): Promise<void> {
   if (action.type === "grant" && action.deviceId) {
+    // Consent banked by POST /checkout when the session was minted. Absent for grants
+    // that came from a static Payment Link (pre-P5, or a rollback), which must still
+    // grant cleanly — hence the conditional spread below.
+    const consent = action.sessionId
+      ? await env.PAID.get<ConsentRecord>(consentKey(action.sessionId), "json")
+      : null;
     const flag: PaidFlag = {
       tier: "pro",
       status: "active",
@@ -112,6 +121,9 @@ export async function applyAction(env: Env, action: Action, nowSec: number): Pro
       customerId: action.customerId,
       subId: action.subId,
       email: action.email,
+      // Conditional spread, not `consent: consent ?? undefined` — this keeps the key
+      // ABSENT rather than serializing an explicit undefined.
+      ...(consent ? { consent } : {}),
     };
     await env.PAID.put(paidKey(action.deviceId), JSON.stringify(flag));
     if (action.email) await env.PAID.put(emailKey(action.email), action.deviceId);
