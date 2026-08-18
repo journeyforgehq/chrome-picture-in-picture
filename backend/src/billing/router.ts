@@ -9,6 +9,7 @@ import { assertBillingConfig } from "./config";
 import { handleMe } from "./me";
 import { handleWebhook } from "./webhook";
 import { handleRestore } from "./restore";
+import { handlePortal } from "./portal";
 
 /**
  * Core billing router. Returns a Response for a billing route (preflight, health,
@@ -30,5 +31,6 @@ export async function handleBilling(req: Request, env: Env, nowSec: number, nowM
   if (req.method === "GET" && url.pathname === "/me") return handleMe(req, env, nowSec);
   if (req.method === "POST" && url.pathname === "/stripe/webhook") return handleWebhook(req, env, nowSec);
   if (req.method === "POST" && url.pathname === "/restore") return handleRestore(req, env, nowMs);
+  if (req.method === "POST" && url.pathname === "/portal") return handlePortal(req, env, nowSec);
   return null;
 }

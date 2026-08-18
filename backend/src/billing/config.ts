@@ -15,6 +15,9 @@ export interface Env {
   HEALTH_TOKEN?: string;
   /** When set (STAGING only), unlocks /__test__/seed + /__test__/reset. NEVER set on prod. */
   E2E_SEED_SECRET?: string;
+  /** Where Stripe returns the customer after they close the portal. Optional —
+   *  Stripe falls back to the account's configured default when unset. */
+  PORTAL_RETURN_URL?: string;
 }
 
 /** DEV_FORCE_PRO is honored only in dev, so it can never ship enabled in prod (spec §9). */
