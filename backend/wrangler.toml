@@ -4,6 +4,7 @@ compatibility_date = "2025-09-06"
 compatibility_flags = ["nodejs_compat"]
 
 [vars]
+STATEMENT_DESCRIPTOR_SUFFIX = "PIP"
 APP_SLUG = "picture-in-picture"
 ENVIRONMENT = "production"
 APP_VERSION = "0.0.0"
@@ -25,13 +26,13 @@ head_sampling_rate = 1
 # Create separate KV namespaces per env (see DEPLOY.md) and paste ids below.
 
 [env.staging]
-vars = { ENVIRONMENT = "staging", APP_VERSION = "0.0.0", APP_SLUG = "picture-in-picture" }
+vars = { ENVIRONMENT = "staging", APP_VERSION = "0.0.0", APP_SLUG = "picture-in-picture", STATEMENT_DESCRIPTOR_SUFFIX = "PIP" }
 [[env.staging.kv_namespaces]]
 binding = "PAID"
 id = "REPLACE_WITH_STAGING_KV_ID"
 
 [env.production]
-vars = { ENVIRONMENT = "production", APP_VERSION = "0.0.0", APP_SLUG = "picture-in-picture" }
+vars = { ENVIRONMENT = "production", APP_VERSION = "0.0.0", APP_SLUG = "picture-in-picture", STATEMENT_DESCRIPTOR_SUFFIX = "PIP" }
 [[env.production.kv_namespaces]]
 binding = "PAID"
 id = "REPLACE_WITH_PROD_KV_ID"
