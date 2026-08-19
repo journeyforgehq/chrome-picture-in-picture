@@ -53,7 +53,14 @@ export async function startCheckout(
   deviceId: string,
   ctx: CheckoutContext
 ): Promise<string | null> {
-  if (config.CHECKOUT_MODE === "link") return checkoutUrl(plan, deviceId);
+  if (config.CHECKOUT_MODE === "link") {
+    // An UNCONFIGURED link is the silent-failure case: checkoutUrl would return
+    // "?client_reference_id=..." — a relative URL that opens a blank tab and
+    // looks like the extension is broken. Return null so the caller surfaces an
+    // error, matching how session mode fails when no Price ID is wired.
+    if (!config.STRIPE_LINKS[plan]) return null;
+    return checkoutUrl(plan, deviceId);
+  }
 
   try {
     const body: CheckoutRequest = {
