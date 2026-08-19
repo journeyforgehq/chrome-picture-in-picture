@@ -47,9 +47,20 @@ async function customerIdFromCharge(env: Env, chargeId: string): Promise<string>
 }
 
 /** Pure event → action mapping (spec §6). */
-export function actionFromEvent(event: any): Action {
+export function actionFromEvent(event: any, appSlug?: string): Action {
   const obj = (event && event.data && event.data.object) || {};
   if (event?.type === "checkout.session.completed") {
+    // One Stripe account serves every extension, and a webhook endpoint receives
+    // the WHOLE account's events — Stripe filters by event type, not by product.
+    // Without this, all seven Workers write a grant for every purchase.
+    //
+    // Absent metadata must still grant: static Payment Link purchases (the
+    // CHECKOUT_MODE=link rollback) and every pre-P5 entitlement carry none.
+    // Only a PRESENT and MISMATCHED app is someone else's sale.
+    const eventApp = obj.metadata && obj.metadata.app;
+    if (eventApp && appSlug && eventApp !== appSlug) {
+      return { type: "ignore" };
+    }
     const isSub = obj.mode === "subscription" && !!obj.subscription;
     // monthly and annual are BOTH subscriptions; the interval isn't reliably
     // available on checkout.session.completed, so the displayed `plan` label is
@@ -220,7 +231,7 @@ export async function handleWebhook(req: Request, env: Env, nowSec: number): Pro
     return json({ received: true });
   }
 
-  const action = actionFromEvent(event);
+  const action = actionFromEvent(event, env.APP_SLUG);
   if (action.type === "ignore") {
     // Received-but-unhandled Stripe event — visibility into what Stripe delivers.
     logInfo("webhook", { event: "ignored", type: event?.type });
