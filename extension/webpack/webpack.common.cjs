@@ -19,6 +19,14 @@ const ENV_FILE =
   APP_ENV === "staging" ? ".env.staging" :
   (APP_ENV === "prod" || APP_ENV === "production") ? ".env.production" :
   ".env";
+// Normalized build target handed to the bundle so runtime code can tell a
+// production build from staging — the test-mode Payment Link guard in
+// src/billing/checkout.ts keys off it. "production" and "prod" collapse to
+// "prod" here so the bundle only ever sees the three canonical values.
+const APP_ENV_NORMALIZED =
+  APP_ENV === "staging" ? "staging" :
+  (APP_ENV === "prod" || APP_ENV === "production") ? "prod" :
+  "local";
 require("dotenv").config({ path: process.env.DOTENV_CONFIG_PATH || r(ENV_FILE) });
 require("dotenv").config({ path: r(".env.local") }); // optional local overrides (git-ignored)
 
@@ -53,6 +61,7 @@ module.exports = (devPro) => ({
   plugins: [
     new CleanWebpackPlugin(),
     new webpack.DefinePlugin({
+      "process.env.APP_ENV": JSON.stringify(APP_ENV_NORMALIZED),
       "process.env.BACKEND_BASE_URL": JSON.stringify(process.env.BACKEND_BASE_URL || ""),
       "process.env.STRIPE_MONTHLY_URL": JSON.stringify(process.env.STRIPE_MONTHLY_URL || ""),
       "process.env.STRIPE_ANNUAL_URL": JSON.stringify(process.env.STRIPE_ANNUAL_URL || ""),

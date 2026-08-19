@@ -7,8 +7,25 @@ import type { Plan } from "../contract";
 
 export type StripeLinks = Record<Plan, string>;
 
+/**
+ * Which committed env file this bundle was built from — the build target, not a
+ * runtime mode. webpack picks .env / .env.staging / .env.production by APP_ENV
+ * and injects the NORMALIZED value here (see webpack/webpack.common.cjs), so
+ * "production" and "prod" both arrive as "prod".
+ */
+export type AppEnv = "local" | "staging" | "prod";
+
+function normalizeAppEnv(raw: string | undefined): AppEnv {
+  if (raw === "staging") return "staging";
+  if (raw === "prod" || raw === "production") return "prod";
+  return "local";
+}
+
 export interface Config {
   BACKEND_BASE_URL: string;
+  /** Build target this bundle was compiled for. Gates the test-mode Payment
+   *  Link check in ./checkout — see `isUsableCheckoutLink`. */
+  APP_ENV: AppEnv;
   STRIPE_LINKS: StripeLinks;
   WELCOME_URL: string;
   /** Post-uninstall feedback page (best on the welcome domain, e.g. `${origin}/uninstall`). Empty = no uninstall tab. */
@@ -38,6 +55,10 @@ const WELCOME_URL = process.env.WELCOME_URL || "";
 
 export const config: Config = {
   BACKEND_BASE_URL: process.env.BACKEND_BASE_URL || "http://localhost:8787",
+  // Defensively normalized again here, not just in webpack: vitest runs in Node
+  // and reads the RAW process.env, so a test (or a `APP_ENV=production` shell)
+  // must land on the same value the bundle would carry.
+  APP_ENV: normalizeAppEnv(process.env.APP_ENV),
   STRIPE_LINKS: {
     monthly: process.env.STRIPE_MONTHLY_URL || "",
     annual: process.env.STRIPE_ANNUAL_URL || "",

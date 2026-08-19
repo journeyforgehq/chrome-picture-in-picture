@@ -4,7 +4,43 @@
 // are reported as drift and refused without --force.
 // =============================================================================
 import { config } from "./config";
+import type { AppEnv } from "./config";
 import type { CheckoutRequest, CheckoutResponse, Plan } from "../contract";
+
+/**
+ * Stripe marks TEST-mode Payment Links with a `test_` path prefix
+ * (https://buy.stripe.com/test_4gM5kx...). Live links never carry it, so the
+ * prefix is a reliable mode signal without calling the API.
+ */
+const TEST_MODE_LINK = /^https?:\/\/(?:[a-z0-9-]+\.)*stripe\.com\/test_/i;
+
+/** Scaffold stand-ins that are syntactically valid URLs but point nowhere. */
+const PLACEHOLDER_MARKERS = ["REPLACE_ME", "_placeholder"];
+
+export function isTestModeLink(url: string): boolean {
+  return TEST_MODE_LINK.test(url);
+}
+
+/**
+ * Whether a static Payment Link is safe to open.
+ *
+ * Three ways it is not, all of which otherwise fail SILENTLY — the customer
+ * sees something plausible and we learn about it from a support email:
+ *
+ *  - unset: `checkoutUrl` would return a bare "?client_reference_id=..." — a
+ *    relative URL that opens a blank tab.
+ *  - a scaffold placeholder (test_REPLACE_ME, test_lifetime_placeholder): a
+ *    dead Stripe page.
+ *  - a TEST-mode link in a PRODUCTION build: a checkout that looks completely
+ *    normal, where every real card is declined and no money is ever collected.
+ *    Test links belong in staging, which is why the check is prod-only.
+ */
+export function isUsableCheckoutLink(base: string, appEnv: AppEnv = config.APP_ENV): boolean {
+  if (!base) return false;
+  if (PLACEHOLDER_MARKERS.some((marker) => base.includes(marker))) return false;
+  if (appEnv === "prod" && isTestModeLink(base)) return false;
+  return true;
+}
 
 /**
  * Version of the terms the paywall showed when the customer clicked buy. It is
@@ -54,11 +90,10 @@ export async function startCheckout(
   ctx: CheckoutContext
 ): Promise<string | null> {
   if (config.CHECKOUT_MODE === "link") {
-    // An UNCONFIGURED link is the silent-failure case: checkoutUrl would return
-    // "?client_reference_id=..." — a relative URL that opens a blank tab and
-    // looks like the extension is broken. Return null so the caller surfaces an
-    // error, matching how session mode fails when no Price ID is wired.
-    if (!config.STRIPE_LINKS[plan]) return null;
+    // Return null rather than a bad URL so the caller surfaces an error,
+    // matching how session mode fails when no Price ID is wired. See
+    // isUsableCheckoutLink for the three cases this catches.
+    if (!isUsableCheckoutLink(config.STRIPE_LINKS[plan])) return null;
     return checkoutUrl(plan, deviceId);
   }
 
