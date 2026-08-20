@@ -38,7 +38,34 @@ export async function getDeviceId(stores: DeviceIdStores): Promise<string> {
   const { sync, local } = stores;
 
   const fromSync = (await sync.get(KEY))[KEY] as string | undefined;
-  if (fromSync) return fromSync;
+  if (fromSync) {
+    // Converge DOWNWARD too. This path used to return here, which made the
+    // contract above false in one direction: an id present in sync but absent
+    // from local stayed absent forever.
+    //
+    // Two ways to land in that state. A user signs into Chrome on a new machine
+    // and sync delivers the id before anything writes local. Or an init is
+    // interrupted between the two writes below — the window is small (sync.set
+    // measures 2-27ms here) but it is real, and it is what made the e2e billing
+    // specs fail roughly one run in three with "device_id not written".
+    //
+    // It matters beyond the tests because THE LOCAL COPY IS THE DURABLE ONE.
+    // chrome.storage.sync can be switched off by the user or by enterprise
+    // policy, and if it is, a sync-only id disappears: both reads miss, a fresh
+    // id is generated, and because entitlements are keyed by device id the
+    // customer silently loses Pro until they restore by email.
+    //
+    // Best-effort: a failure here must not deny the caller an id it already
+    // has. Worst case we retry the write on the next call.
+    if (!(await local.get(KEY))[KEY]) {
+      try {
+        await local.set({ [KEY]: fromSync });
+      } catch {
+        /* keep the id; retry next call */
+      }
+    }
+    return fromSync;
+  }
 
   const fromLocal = (await local.get(KEY))[KEY] as string | undefined;
   if (fromLocal) {

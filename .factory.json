@@ -35,7 +35,7 @@
     "extension/src/billing/checkout.ts": "a7b536c1c8a2348f4aa03beb61ffe8f6daa7482030d1c923ab8a7316d81e1d0c",
     "extension/src/billing/chrome-storage.ts": "0d0140621a9f77e5e6c258bfd63f5888187c6f5c4b74861ed07f0b4d70dc606b",
     "extension/src/billing/config.ts": "ed97d5c184ad3d28fe5de5d2c2a0b74a18c3a9e2970aba18ce6788d7712f434d",
-    "extension/src/billing/device-id.ts": "af13e8d8f86eefc76b5a0df8f02161f6563ba93cfb378bd42470915ae3ca4f33",
+    "extension/src/billing/device-id.ts": "f649e9478df1e6036368faabda0e1457fd58761fe1899e57dcb6914945d57f4d",
     "extension/src/billing/entitlement.test.ts": "c69032e02ae6422935a146cd5074d374c0bbcbf1a4a0a2b5acb2e1f66414efa3",
     "extension/src/billing/entitlement.ts": "14beb174e58c475ccecc2ccac8b83d7c096722031368d4d34fcf26574c459b40",
     "extension/src/billing/index.ts": "5e8c96e0286767bec10662affe9a0e6035084c2194246afdf3edd4e828956780",
