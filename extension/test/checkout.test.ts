@@ -200,3 +200,100 @@ describe("link mode with an unconfigured link", () => {
     delete process.env.CHECKOUT_MODE;
   });
 });
+
+describe("isUsableCheckoutLink", () => {
+  const ORIGINAL_ENV = { ...process.env };
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  async function load() {
+    vi.resetModules();
+    return import("../src/billing/checkout");
+  }
+
+  const LIVE = "https://buy.stripe.com/4gM5kxaSyci8dzP38K";
+  const TEST = "https://buy.stripe.com/test_4gM5kxaSyci8dzP38K";
+
+  it("accepts a live link in every build target", async () => {
+    const { isUsableCheckoutLink } = await load();
+    for (const env of ["local", "staging", "prod"] as const) {
+      expect(isUsableCheckoutLink(LIVE, env)).toBe(true);
+    }
+  });
+
+  it("accepts a test link locally and in staging — that is where it belongs", async () => {
+    const { isUsableCheckoutLink } = await load();
+    expect(isUsableCheckoutLink(TEST, "local")).toBe(true);
+    expect(isUsableCheckoutLink(TEST, "staging")).toBe(true);
+  });
+
+  it("REJECTS a test link in a production build", async () => {
+    const { isUsableCheckoutLink } = await load();
+    expect(isUsableCheckoutLink(TEST, "prod")).toBe(false);
+  });
+
+  it("rejects an unset link in every build target", async () => {
+    const { isUsableCheckoutLink } = await load();
+    for (const env of ["local", "staging", "prod"] as const) {
+      expect(isUsableCheckoutLink("", env)).toBe(false);
+    }
+  });
+
+  it("rejects scaffold placeholders everywhere, not just in prod", async () => {
+    const { isUsableCheckoutLink } = await load();
+    for (const env of ["local", "staging", "prod"] as const) {
+      expect(isUsableCheckoutLink("https://buy.stripe.com/test_REPLACE_ME", env)).toBe(false);
+      expect(isUsableCheckoutLink("https://buy.stripe.com/test_lifetime_placeholder", env)).toBe(false);
+    }
+  });
+
+  it("identifies test-mode links by Stripe's test_ path prefix", async () => {
+    const { isTestModeLink } = await load();
+    expect(isTestModeLink(TEST)).toBe(true);
+    expect(isTestModeLink(LIVE)).toBe(false);
+    // A live slug that merely CONTAINS "test" is not a test-mode link.
+    expect(isTestModeLink("https://buy.stripe.com/contestwinner")).toBe(false);
+    // Lookalike hosts must not be treated as Stripe.
+    expect(isTestModeLink("https://buy.stripe.com.evil.example/test_x")).toBe(false);
+    expect(isTestModeLink("https://notstripe.com/test_x")).toBe(false);
+  });
+});
+
+describe("startCheckout link mode reads APP_ENV", () => {
+  const ORIGINAL_ENV = { ...process.env };
+  afterEach(() => {
+    process.env = { ...ORIGINAL_ENV };
+  });
+
+  const ctx = { priceShown: "$9.99", termsVersion: "v1" };
+
+  async function startWith(appEnv: string, link: string) {
+    vi.resetModules();
+    process.env.CHECKOUT_MODE = "link";
+    process.env.APP_ENV = appEnv;
+    process.env.STRIPE_LIFETIME_URL = link;
+    const { startCheckout } = await import("../src/billing/checkout");
+    return startCheckout("lifetime", "dev-1", ctx);
+  }
+
+  it("opens a test link in a staging build", async () => {
+    expect(await startWith("staging", "https://buy.stripe.com/test_abc")).toBe(
+      "https://buy.stripe.com/test_abc?client_reference_id=dev-1"
+    );
+  });
+
+  it("refuses the same test link in a production build", async () => {
+    expect(await startWith("prod", "https://buy.stripe.com/test_abc")).toBeNull();
+  });
+
+  it("treats APP_ENV=production the same as prod", async () => {
+    expect(await startWith("production", "https://buy.stripe.com/test_abc")).toBeNull();
+  });
+
+  it("still opens a live link in a production build", async () => {
+    expect(await startWith("prod", "https://buy.stripe.com/live_abc")).toBe(
+      "https://buy.stripe.com/live_abc?client_reference_id=dev-1"
+    );
+  });
+});
